@@ -186,139 +186,52 @@ def create_figure(G, global_positions, clusters):
 
 def update_figure(fig, selected_cluster, cluster_data):
     if selected_cluster == "<None>":
-        fig = fig.update_traces(visible=True, selector=dict(name='Edges'))
+        return fig
     else:
         # update edges
         edge_indices = cluster_data["cluster_edge_indices"][selected_cluster]
-        background_edge_indices = []
-        for idx in range(*cluster_data["edge_index_range"]):
-            if idx in edge_indices:
-                fig.data[idx].visible = True
-                fig.data[idx].line.update(width=2, color=HIGHLIGHT_COLOR)
-            else:
-                fig.data[idx].visible = True
-                fig.data[idx].line.update(width=1, color=BACKGROUND_COLOR)
-                background_edge_indices.append(idx)
+        
+        """
+        edges_x = []
+        edges_y = []
+        edges_customdata = [] 
+        for idx in edge_indices:
+            edges_x.extend(fig.data[idx].x)
+            fig.data[idx].visible = True
+            fig.data[idx].line.update(width=2, color=HIGHLIGHT_COLOR)
+        """
+
 
         # update nodes
-        node_indices = cluster_data["cluster_node_indices"][selected_cluster] 
-        background_node_indices = []
-        for idx in range(*cluster_data["node_index_range"]):
-            if idx in node_indices:
-                fig.data[idx].marker.update(dict(size=20, color=HIGHLIGHT_COLOR))
-            else:
-                fig.data[idx].marker.update(dict(size=12, color=DEFAULT_NODE_COLOR,))
-                background_node_indices.append(idx)
-        
-            
-
-        # reorder so that background traces are actually in the background      
-        ordered_data = []
-        for idx in background_edge_indices + background_node_indices:
-            ordered_data.append(fig.data[idx])
-
-        for idx in list(edge_indices) + list(node_indices):
-            ordered_data.append(fig.data[idx])
-
-             
-        return go.Figure(layout=fig.layout, data=ordered_data)
-
-        #fig_new = fig_new.update_traces(marker_color=DEFAULT_NODE_COLOR, selector=dict(name='Nodes'))
-        #node_indices = cluster_data["cluster_node_indices"][selected_cluster]
-        #for idx in node_indices:
-        #    fig_new.data[idx].marker = dict(size=20, color=HIGHLIGHT_COLOR)
-    return fig
-
-
-
-def create_figure2(G, global_positions, selected_cluster):
-
-    fig = go.Figure()
-
-    # a) Add edges
-
-    edge_visible = []
-    for (u, v) in G.edges():
-        # get the positions
-        x0, y0 = global_positions[u]
-        x1, y1 = global_positions[v]
-        edge_x = [x0, x1, None]
-        edge_y = [y0, y1, None]
-        
-        edge_visible = True
-        if selected_cluster == "<None>":
-            line=dict(color="#D3D3D3", width=1)
-        elif (selected_cluster in G.nodes[u]['cluster']) and (selected_cluster in G.nodes[v]['cluster']):
-            line=dict(color="#A9A9A9", width=1)
-        else: 
-            line=dict(color="#E6E6E6", width=1)
-            edge_visible=False
-        
+        node_indices = cluster_data["cluster_node_indices"][selected_cluster]
+        nodes_x = []
+        nodes_y = []
+        nodes_customdata = [] 
+        for idx in node_indices:          
+            #fig.data[idx].marker.update(dict(size=20, color=HIGHLIGHT_COLOR))
+            nodes_x.extend(fig.data[idx].x)
+            nodes_y.extend(fig.data[idx].y)
+            nodes_customdata.extend(fig.data[idx].customdata)
 
         fig.add_trace(
             go.Scatter(
-                x=edge_x,
-                y=edge_y,
-                mode='lines',
-                line=line,
-                hoverinfo='none',
-                visible=edge_visible,
-                name='Edges'
-            )
-        )
-
-    # b) Cluster selection in Streamlit
-
-
-    # c) Add nodes (color highlight if cluster is selected)
-
-    for node in G.nodes():
-        x, y = global_positions[node]
-        
-        data = G.nodes[node].copy()
-        c = data['cluster']
-        
-        node_text = f"Century: {data['century']}"  # Adjusted formatting
-
-        visible = True
-        if  selected_cluster in c:
-            node_color =[ "#d62728"]  # highlight color
-        elif selected_cluster == "<None>":
-            node_color = ["#BDBDBD"]  # gray out
-        else:
-            node_color =[ "#BDBDBD"]  # gray out
-            visible=True
-        
-        fig.add_trace(
-            go.Scatter(
-                x=[x],
-                y=[y],
+                x=nodes_x,
+                y=nodes_y,
                 mode='markers',
-                visible=visible,
+                visible=True,
                 marker=dict(
-                    size=12,
-                    color=node_color,
+                    size=20,
+                    color=HIGHLIGHT_COLOR,
                     line=dict(color="black",width=1)
                 ),
-                customdata=[[data["title"], data["subtitle"], node_text]],  # Store node_text in customdata
-                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br><br><i>%{customdata[2]}</i>",  
-                name='Episodes'
+                customdata=nodes_customdata,  # Store node_text in customdata
+                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br><br><i>Century: %{customdata[2]}</i>",  
+                name="Nodes"
             )
         )
+        return fig
 
-    # d) Final layout touches
-    fig.update_layout(
-        title="<b>Podcast Episode Network</b>",
-        title_font=dict(size=20, color="#333"),  # Dark gray for a clean look
-        showlegend=False,
-        xaxis=dict(showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False),
-        margin=dict(l=20, r=20, t=40, b=20),
-        plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
-        paper_bgcolor="#F0F2F6",  # Ensures smooth blending
-    )
 
-    return fig
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ def main():
     rss_url = st.text_input("Enter Podcast RSS Feed URL:")
     
     if rss_url:
-        fig, cluster_data = run_analysis(rss_url)           
+        base_fig, cluster_data = run_analysis(rss_url)           
         
         selected_cluster = st.sidebar.selectbox(
             "Select a cluster to highlight:",
@@ -41,7 +41,7 @@ def main():
         )
 
         
-
+        fig = copy.deepcopy(base_fig)
         updated_fig = update_figure(fig, selected_cluster, cluster_data)
         selection = st.plotly_chart(updated_fig , use_container_width=True, key="network", on_select="rerun")
         if len(selection["selection"]["points"]) > 0:
