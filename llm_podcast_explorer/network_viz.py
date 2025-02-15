@@ -4,6 +4,7 @@ import json
 import itertools
 from collections import Counter
 import pandas as pd
+import numpy as np
 
 def build_network_graph(episodes):
     
@@ -48,53 +49,45 @@ def build_networkx_graph(episodes):
     # -------------------------------
     # 3) Identify century Buckets
     # -------------------------------
-    unique_centuries = sorted([century for century in set(nx.get_node_attributes(G, 'century').values()) if century is not None])
-
-    # Create a dictionary to track final global positions of each node
+    unique_centuries = sorted(
+        {century for century in nx.get_node_attributes(G, 'century').values() if century is not None}
+    )
     global_positions = {}
+    timeline=True
 
-    # We'll choose an x position for each century bucket (column center)
-    x_start = min(unique_centuries)*100
-    x_stop = (max(unique_centuries)+1)*100
-    bucket_x_positions = range(x_start, x_stop, 100)
+    if timeline:
+        x_positions = {century: century * 10 for century in unique_centuries}
 
-    # -------------------------------
-    # 4) Create Subgraphs and Layout Each Bucket
-    #    - Subgraph includes only nodes and edges *within* that century bucket
-    #    - Then apply a layout (e.g. spring_layout), center/shift the result
-    # -------------------------------
-    for century in unique_centuries:
-        # a) Build subgraph for century = t
-        nodes_in_t = [n for n in G.nodes if G.nodes[n]['century'] == century]
-        # Edges that connect ONLY those nodes
-        G_t = G.subgraph(nodes_in_t).copy()
+        for century in unique_centuries:
+            nodes_in_century = [n for n in G.nodes if G.nodes[n].get('century') == century]
+            G_sub = G.subgraph(nodes_in_century).copy()
 
-        # b) Compute a layout within this subgraph (e.g. force-directed)
-        #    This returns coords in a small bounding box, typically around (0,0).
-        pos_t = nx.spring_layout(G_t, seed=42, k=10)  
-        #   - 'k' controls the optimal distance between nodes. Adjust for spacing.
+            if len(G_sub.nodes) == 1:
+                # Place single nodes directly
+                global_positions[nodes_in_century[0]] = (x_positions[century], 0)
+                continue
+            
+            # Use Kamada-Kawai layout for better spacing
+            pos = nx.kamada_kawai_layout(G_sub)  
 
-        # c) Find the average x of subgraph (to help center it at bucket_x_positions[t])
-        #    and the average y (so we can shift it up/down).
-        x_vals = [pos_t[n][0] for n in G_t.nodes()]
-        y_vals = [pos_t[n][1] for n in G_t.nodes()]
-        mean_x = sum(x_vals)/len(x_vals) if x_vals else 0
-        mean_y = sum(y_vals)/len(y_vals) if y_vals else 0
+            # Compute centroid
+            x_vals, y_vals = zip(*pos.values()) if pos else ([0], [0])
+            mean_x, mean_y = sum(x_vals) / len(x_vals), sum(y_vals) / len(y_vals)
 
-        # We'll shift so that the subgraph is centered on (bucket_x_positions[t], 0)
-        shift_x = century*10 - mean_x
-        shift_y = 0 - mean_y  # or any vertical offset if you like
+            # Adjust layout to align centuries
+            shift_x = x_positions[century] - mean_x
+            shift_y = -mean_y  
 
-        # Optionally scale the subgraph if you want narrower/wider columns
-        # For example, scale factor of 2 would double the relative positions
-        scale_factor = 1.0
+            # Add slight random jitter to avoid perfect circles
+            jitter = lambda: np.random.uniform(-2, 2)
+            
+            for node, (raw_x, raw_y) in pos.items():
+                global_positions[node] = (raw_x + shift_x + jitter(), raw_y + shift_y + jitter())
 
-        # d) Store the shifted positions in the global dictionary
-        for node in G_t.nodes():
-            raw_x, raw_y = pos_t[node]
-            final_x = (raw_x * scale_factor) + shift_x
-            final_y = (raw_y * scale_factor) + shift_y
-            global_positions[node] = (final_x, final_y)
+    else:
+        global_positions = nx.spring_layout(G, seed=42, k=10)
+
+        
 
     sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
     min_cluster_size = 3
