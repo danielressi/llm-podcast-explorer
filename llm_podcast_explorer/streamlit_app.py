@@ -4,6 +4,7 @@ from rss_feed_analyzer import RSSFeedAnalyzer, AnalyzedEpisodes
 import os
 from network_viz import build_networkx_graph, create_figure, update_figure
 import copy
+import time
 
 llm_api_key = os.environ.get('OPENAI_API_KEY')
 if llm_api_key is None:
@@ -39,13 +40,22 @@ def main():
             options=["<None>"] + list(cluster_data["clusters"]),
             index=0
         )
+        start_t = time.time()
 
         
         fig = copy.deepcopy(base_fig)
         updated_fig = update_figure(fig, selected_cluster, cluster_data)
-        selection = st.plotly_chart(updated_fig , use_container_width=True, key="network", on_select="rerun")
-        if len(selection["selection"]["points"]) > 0:
-            selection["selection"]["points"][0]["customdata"][-1]
+        selection = st.plotly_chart(updated_fig,
+                                    use_container_width=True,
+                                    key="network",
+                                    selection_mode=('points',),
+                                    on_select="rerun")
+        
+        with st.sidebar:
+            if len(selection["selection"]["points"]) > 0:
+                selection["selection"]["points"][0]["customdata"][-1]
+
+            st.write(f"Took {time.time() - start_t:.2f} seconds")
 
         #plotly_chart.plotly_chart(fig, use_container_width=True)
         #fig = create_figure2(G, global_positions, selected_cluster)
