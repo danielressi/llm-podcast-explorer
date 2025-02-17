@@ -20,11 +20,12 @@ import logging
 import feedparser
 import itertools
 import collections
+import umap
 
 class RSSFeedItem(BaseModel):
     title: str = Field(..., description="The title of the episode")
     subtitle: Optional[str] = Field(default=None, description="The subtitle of the episode")
-    description: str = Field(..., description="The description of the episode", alias="summary")
+    description: Optional[str] = Field(default=None, description="The description of the episode", alias="summary")
     id: str = Field(..., description="The unique identifier of the episode")
     episode_number: Optional[int] = Field(default=None, description="", alias="podcast_episode")
     link: str = Field(..., description="The link to the episode")
@@ -45,19 +46,13 @@ class RSSFeedLoader:
 
 
 
-class WarmupOutput(BaseModel):
-    """Extra metadata inferred during warmump"""
-    podcast_name: str = Field(..., description="The name of the podcast")
-    podcast_description: str = Field(..., description="The description of the podcast in one sentence")
-    suggested_extra_fields: Dict[str, Any] = Field(..., description="Characterstic extra fields as keys and examples as values")
-
-
 class EpisodeInsights(BaseModel):
     """Information about a person."""
     episode_id: str = Field(..., description="The unique identifier of the episode extracted from title or description.")
     topic: str = Field(..., description="The topic of the episode.")
-    topic_year: Optional[int] = Field(default=None, description="The year related to the topic not the episode. null if unknown")
-    topic_century: Optional[int] = Field(default=None, description="The century related to the topic.")
+    summary: Optional[str] = Field(default=None, description="Short summary of the episode")
+    topic_year: Optional[int] = Field(default=None, description="The year related to the topic not the episode (Best guess if not explicitly mentioned)")
+    topic_century: Optional[int] = Field(default=None, description="The century related to the topic (Best guess if not explicitly mentioned)")
     tags: List[str] = Field(..., description="Enriched tags associated with the episode.")
     inferred_themes: List[str] = Field(..., description="Common themes that seem to fit to the episode.")
     referenced_episodes_id: List[str] = Field(..., description="Referenced episodes in this episode. Needs to match episode_id schema")
@@ -65,11 +60,13 @@ class EpisodeInsights(BaseModel):
 
 class ClusteredEpisodeInsights(BaseModel):
     #tags: Optional[Set[str]] = Field(default=None, description="Clustered tags associated with the episode.")
-    themes: Set[int] = Field(..., description="Cluster theme ids of the episode.")
+    themes: List[int] = Field(..., description="Cluster theme ids of the episode.")
     #topics: Set[str] = Field(..., description="Clustered topics of the episode.")
+    embeddings: Optional[Any] = Field(default = None, description="Umap embeddings")
+
 class Episode(BaseModel):
 
-    metadata: Dict[str, Any] = Field(..., description="Metadata of the episode.")
+    metadata: RSSFeedItem = Field(..., description="Metadata of the episode.")
     insights: EpisodeInsights = Field(..., description="Insights of the episode.")
     clusters: Optional[ClusteredEpisodeInsights] = Field(default=None, description="Mapping from insights to clusters")
 
@@ -77,7 +74,7 @@ class AnalyzedEpisodes(BaseModel):
     episodes: List[Episode] = Field(..., description="A list of analyzed episodes.")
     
     def save_episodes(self, file_path: str):
-        Path(file_path).parent.mkdir(exist_ok=True)
+        Path(file_path).parent.mkdir(exist_ok=True, parents=True)
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(self.model_dump_json(indent=4))
     
@@ -101,15 +98,19 @@ class ClusterTitlesBatch(BaseModel):
 
 
 class RSSFeedAnalyzer:
-    def __init__(self, rss_url, model="gpt-4o-mini", llm_api_key=None, warmup=True, logger=None, embedding_model="text-embedding-3-small"):
+    def __init__(self, rss_url, model="gpt-4o-mini", llm_api_key=None, logger=None, embedding_model="text-embedding-3-small"):
         self.rss_loader = RSSFeedLoader(rss_url)
         self.llm = ChatOpenAI(model=model, api_key=llm_api_key)
         self.embeddings = self._init_embeddings(embedding_model)
-        self.warmup = warmup
+
         if logger is None:
             self.logger = logging.getLogger(__name__)
         else:
             self.logger = logger
+
+    @property
+    def title(self):
+        return self.rss_loader.title
 
     def _init_embeddings(self, embedding_model, path="./cache/"):
         embeddings = OpenAIEmbeddings(model=embedding_model)
@@ -120,60 +121,37 @@ class RSSFeedAnalyzer:
             document_embedding_cache=store, 
             namespace=embeddings.model, # Create a cache-backed embedder using the base embedding and storage
             )
-
-
-    def _run_warmup(self, sample_size=5):
-        example_content = "\n\n".join([episode.description for i,episode in enumerate(self.rss_loader.lazy_load()) if i < sample_size] )
-        prompt_template = ChatPromptTemplate([
-            ("system", """
-            You are an information extraction and generalisation specialist for a podcast.
-            This is the description of the podcast: {podcast_description}
-             
-            Given the summary of {sample_size} example episodes, analyse common patterns in the the way the content is structured and how episodes can be linked with each other in a network graph. 
-            Based on these patterns recommend extra kev value pairs (in the original language) that generalize well and could be extracted for all other episodes. If field values contains items make sure to use Lists.
-            Output your answer as JSON that matches the given schema, but avoid the existing fields {episode_insights}
-            """),
-            ("user", "{sample_size} example contents of one podcast: {episode_content}"),
-        ]).partial(
-                   sample_size=sample_size, 
-                   podcast_description=self.rss_loader.description,
-                   episode_insights=EpisodeInsights.model_fields.keys())
-        
-        warmup_chain = prompt_template | self.llm 
-
-        return warmup_chain.invoke({"episode_content": example_content})
-
     def analyze_feed(self, limit=10000):
         episode_loader = self.rss_loader.lazy_load()
+        self.logger.info(f"Analyzing {self.rss_loader.size} podcast episdoes")
         parser = PydanticOutputParser(pydantic_object=EpisodeInsights)
-        if self.warmup:
-            self.logger.info("Running warmup")
-            warmup_output = self._run_warmup()
-            prompt_template = ChatPromptTemplate([
-                ("system", """
-                You are an information extraction and generalisation specialist for a podcast called {podcast_name}. {podcast_description}
-                Given the description of an episode, extract the relevant tags and suggest themes that can be used to generalize and cluster all of the episodes later.
-                Output your answer (in same language as the input)  JSON that matches the given schema: {format_instructions}. Example for the extra fields and patterns to pay attention to are {extra_schema}
-                """),
-                ("user", "Episode Title: {title}\n\nEpisode Content: {episode_content}"),
-            ]).partial(format_instructions=parser.get_format_instructions(), 
-                       extra_schema=warmup_output.suggested_extra_fields,
-                       podcast_name=warmup_output.podcast_name,
-                       podcast_description=warmup_output.podcast_description
-                       )
-        else:
-            prompt_template = ChatPromptTemplate([
-                ("system", """
-                You are an information extraction and generalisation specialist for a podcast called {podcast}.
-                Given the description of an episode, extract up to {limit} relevant tags and also suggest fitting themes that can be used to describe and generalize the episode.
-                The goal is to analyse and cluster all of the episodes in a later stage, so the themes and tags should be consistent across all episodes.
-                Constraints:
-                    - The tags and themes must be in the same language as the input
-                    - Output your answer as JSON that matches the given schema: {format_instructions}.
-                """),
-                ("user", "Episode Title: {title}\n\n Episode Content: {episode_content}"),
-            ]).partial(format_instructions=parser.get_format_instructions(), podcast=self.rss_loader.title, limit=5)
-        
+
+        prompt_template = ChatPromptTemplate([
+            ("system", """
+            You are an information extraction and generalisation specialist for a podcast called {podcast}.
+            This is the description of the podcast to provide more context: {podcast_description}
+            
+            Your task:
+            
+            Given the description of an episode you have the following tasks:
+                - Give a short and poignant summary of the episode in no more than 30 words
+                - extract up to {tag_limit} relevant tags 
+                - suggest up to {theme_limit} fitting themes or topic areas that can be used to describe and generalize the topic of the episode.
+            
+            The goal is to analyse and cluster all of the episodes in a later stage, so the themes and tags should be consistent across all episodes.
+            Constraints:
+                - The tags and themes must be in the same language as the input
+                - Output your answer as JSON that matches the given schema: {format_instructions}.
+             
+            
+            """),
+            ("user", "Episode Title: {title}\n\n Episode Content: {episode_content}"),
+        ]).partial(format_instructions=parser.get_format_instructions(),
+                    podcast=self.rss_loader.title, 
+                    tag_limit=5,
+                    theme_limit=2,
+                    podcast_description=self.rss_loader.description)
+    
 
 
         chain = prompt_template | self.llm | parser.with_retry()
@@ -222,9 +200,14 @@ class RSSFeedAnalyzer:
         return clusters
 
     
+    def _run_umap(self, vectors):
+        reducer = umap.UMAP()
+        embedding_2d = reducer.fit_transform(vectors)
+        return embedding_2d
+
     def _cluster_vocabulary(self, analysed_episodes):
         vocabulary = self._create_vocabulary(analysed_episodes)
-        vectors =  np.array(self.embeddings.embed_documents(vocabulary.keys()))
+        vectors =  np.array(self.embeddings.embed_documents(list(vocabulary.keys())))
 
         clusters = self._predict_clusters(vectors)
         clusters_df = pd.DataFrame({"vocabulary":vocabulary.keys(),
@@ -252,6 +235,10 @@ class RSSFeedAnalyzer:
 
         
         self.logger.info("Clustering results:\n {cluster_sizes}")
+
+        embedding_2d = self._run_umap(vectors)
+        clusters_df["umap_0"] = embedding_2d[:,0]
+        clusters_df["umap_1"] = embedding_2d[:,1] 
         return clusters_df
         
     @staticmethod
@@ -327,15 +314,24 @@ class RSSFeedAnalyzer:
         clusters_df.loc[clusters_df["title"].isnull(), "title"] = clusters_df.loc[clusters_df["title"].isnull(), "vocabulary"]
         vocabulary_mapping = clusters_df.set_index("vocabulary")["title"].to_dict()
 
+        
+        title_df = clusters_df.drop_duplicates(subset="title").reset_index().set_index("title")
+        title_2_index = title_df["index"].to_dict()
+
         consolidated_episodes = []
         for e in analysed_episodes.episodes:
             insights = EpisodeInsights(**e.insights.model_dump())
             clustered_episode_themes = {theme: vocabulary_mapping[theme] for theme in e.insights.inferred_themes if theme in vocabulary_mapping}
-            cluster_ids = set(clusters_df[clusters_df["vocabulary"].isin(clustered_episode_themes.keys())]["cluster"])
-            insights.inferred_themes = set(clustered_episode_themes.values())
+            insights.inferred_themes = list(set(clustered_episode_themes.values()))
+            
+            indices = [title_2_index[t] for t in insights.inferred_themes]
+            cluster_ids = clusters_df.loc[indices, "cluster"].to_list()
+            embeddings2d = clusters_df.loc[indices, ["umap_0","umap_1"]].values.tolist()
+
 
             clusters = ClusteredEpisodeInsights(
-                themes=cluster_ids
+                themes=cluster_ids,
+                embeddings=embeddings2d
             )
 
             consolidated_episodes.append(Episode(
@@ -402,31 +398,24 @@ class RSSFeedAnalyzer:
         return AnalyzedEpisodes(episodes=clustered_episodes)
 
     
-    def run(self, limit=10000, checkpoint=True):
+    def run(self, limit=1000, checkpoint=False):
         if checkpoint:
             analysed_episodes = AnalyzedEpisodes.load("./dev_data/analysed_episodes.json")
-            theme_clusters = analyzer._cluster_vocabulary(analysed_episodes)
-            consolidated_episodes = analyzer._consolidate(analysed_episodes, theme_clusters)
+            theme_clusters = self._cluster_vocabulary(analysed_episodes)
+            consolidated_episodes = self._consolidate(analysed_episodes, theme_clusters)
         else:
             analysed_episodes = self.analyze_feed(limit)
-            #consolidated_results = self._consolidate(analysed_episodes)
-            word_clusters = self._cluster_vocabulary(analysed_episodes)
-            consolidated_episodes = analysed_episodes
+            theme_clusters = self._cluster_vocabulary(analysed_episodes)
+            consolidated_episodes = self._consolidate(analysed_episodes, theme_clusters)
             #clustered_results = self._cluster(consolidated_results)
         return consolidated_episodes
 
 
 
-# Example usage:
-# rss_urls = ["https://example.com/rss_feed"]
-# llm_api_key = "your_openai_api_key"
-# analyzer = RSSFeedAnalyzer(rss_urls, llm_api_key)
-# analyzer.warmup(sample_size=5)
-# results = analyzer.analyze_feeds()
-# print(results)
+
 
 if __name__ == "__main__":
-    analyzer = RSSFeedAnalyzer("https://geschichten-aus-der-geschichte.podigee.io/feed/mp3", llm_api_key=os.environ.get('OPENAI_API_KEY'), warmup=False)
+    analyzer = RSSFeedAnalyzer("https://geschichten-aus-der-geschichte.podigee.io/feed/mp3", llm_api_key=os.environ.get('OPENAI_API_KEY'))
     checkpoint = True
     if checkpoint:
         analysed_episodes = AnalyzedEpisodes.load("./dev_data/analysed_episodes.json")
