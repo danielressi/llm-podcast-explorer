@@ -5,6 +5,7 @@ import itertools
 from collections import Counter
 import pandas as pd
 import numpy as np
+from plotly.subplots import make_subplots
 
 def build_network_graph(episodes):
     
@@ -21,7 +22,7 @@ def build_network_graph(episodes):
     return nodes, edges
 
 
-def build_networkx_graph(episodes, weight_threshold=0.6):
+def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
         # -------------------------------
     # 2) Build the Main Graph
     # -------------------------------
@@ -33,10 +34,17 @@ def build_networkx_graph(episodes, weight_threshold=0.6):
                    title=ep["metadata"]["title"], 
                    subtitle=ep["metadata"]["subtitle"],
                    century=century,
+                   embedding=ep["clusters"]["embeddings"],
                    on_click=dict(
-                                #title=ep["metadata"]["title"],
-                                 #description=ep["metadata"]["description"],
-                                 link=f'<a target="_blank" href="{ep["metadata"]["link"]}">{ep["metadata"]["title"]}</a>'),
+                                 title=ep["metadata"]["title"],
+                                 summary=ep["insights"]["summary"],
+                                 #topic=ep["insights"]["topic"],
+                                 tags=ep["insights"]["tags"],
+                                 themes=ep["insights"]["inferred_themes"],
+                                 referenced_episodes=ep["insights"]["referenced_episodes_id"],
+                                 link=ep["metadata"]["link"],
+                                 year= f'{ep["insights"]["topic_year"]} ({ep["insights"]["topic_century"]} Century)'
+                                 ),
                    cluster=ep["insights"]["inferred_themes"])
         all_clusters.update(ep["insights"]["inferred_themes"])
     edges_data = ()
@@ -52,7 +60,7 @@ def build_networkx_graph(episodes, weight_threshold=0.6):
             referenced_edges += ((ep_x["insights"]['episode_id'], ep_y["insights"]['episode_id'], 1),)            
     
     G.add_weighted_edges_from(edges_data,attr="themes")
-    G.add_weighted_edges_from(referenced_edges, attr="references")
+    #G.add_weighted_edges_from(referenced_edges, attr="references")
     # -------------------------------
     # 3) Identify century Buckets
     # -------------------------------
@@ -60,7 +68,6 @@ def build_networkx_graph(episodes, weight_threshold=0.6):
         {century for century in nx.get_node_attributes(G, 'century').values() if century is not None}
     )
     global_positions = {}
-    timeline=True
 
     if timeline:
         scale = 100
@@ -93,7 +100,8 @@ def build_networkx_graph(episodes, weight_threshold=0.6):
                 global_positions[node] = (raw_x + shift_x + jitter(), raw_y + shift_y + jitter())
 
     else:
-        global_positions = nx.spring_layout(G, seed=42, k=10)
+        global_positions = {node: np.array(G.nodes[node]["embedding"]).mean(axis=0) for node in  G.nodes()}
+        #global_positions = nx.spring_layout(G, seed=42, k=10)
 
         
 
@@ -111,6 +119,7 @@ DEFAULT_NODE_COLOR = "rgba(138, 138, 138, 0.8)"
 
 def create_figure(G, global_positions, clusters):
     fig = go.Figure()
+    #fig = make_subplots(specs=[[{"secondary_y": True}]])
     cluster_edges_indices = {c: set() for c in clusters}
     cluster_node_indices = {c: set() for c in clusters}
     edge_x = []
@@ -133,7 +142,7 @@ def create_figure(G, global_positions, clusters):
         offset += 1
 
     fig.add_trace(
-        go.Scattergl(
+        go.Scatter(
             x=edge_x,
             y=edge_y,
             mode='lines',
@@ -141,7 +150,8 @@ def create_figure(G, global_positions, clusters):
             hoverinfo='none',
             visible=True,
             name="Edges"
-        )
+        ),
+        #secondary_y=True,
     )
 
     index_offset = 0 # len(G.edges())
@@ -166,7 +176,7 @@ def create_figure(G, global_positions, clusters):
 
     ### Nodes
     fig.add_trace(
-        go.Scattergl(
+        go.Scatter(
             x=nodes_x,
             y=nodes_y,
             mode='markers',
@@ -179,7 +189,8 @@ def create_figure(G, global_positions, clusters):
             customdata=metadata_list,  # Store node_text in customdata
             hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br><br><i>Century: %{customdata[2]}</i>",  
             name="Nodes"
-        )
+        ),
+        #secondary_y=True,
     )
 
 
@@ -199,7 +210,7 @@ def create_figure(G, global_positions, clusters):
     return fig, cluster_edges_indices, cluster_node_indices, index_ranges
 
 
-def update_figure(fig, selected_cluster, cluster_data):
+def update_figure(fig, selected_cluster, cluster_data, timeline):
     if selected_cluster == "<None>":
         return fig
     else:
@@ -221,8 +232,9 @@ def update_figure(fig, selected_cluster, cluster_data):
                 line=dict(color=HIGHLIGHT_COLOR, width=2),
                 hoverinfo='none',
                 visible=True,
-                name="Edges-Selected"
-                )
+                name="Edges-Highlight"
+                ),
+            #secondary_y=False,
         )
 
         # update nodes
@@ -236,6 +248,7 @@ def update_figure(fig, selected_cluster, cluster_data):
             nodes_y.append(fig.data[1].y[idx])
             nodes_customdata.append(fig.data[1].customdata[idx])
 
+        fig.update_traces(hoverinfo='skip', hovertemplate=None)
         fig.add_trace(
             go.Scatter(
                 x=nodes_x,
@@ -249,9 +262,14 @@ def update_figure(fig, selected_cluster, cluster_data):
                 ),
                 customdata=nodes_customdata,  # Store node_text in customdata
                 hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br><br><i>Century: %{customdata[2]}</i>",  
-                name="Nodes-extra"
-            )
+                name="Nodes-Highlight"
+            ),
+            #secondary_y=False
         )
+        if timeline:
+            x_min = max([min(nodes_x) - 500, min(fig.data[1].x)-100])
+            x_max = min([max(nodes_x) + 500, max(fig.data[1].x)+100])
+            fig.update_layout(xaxis_range=[x_min, x_max])
         return fig
 
 
