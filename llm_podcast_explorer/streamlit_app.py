@@ -7,26 +7,42 @@ import copy
 import time
 from typing import Dict, Union, List
 from pathlib import Path
+from streamlit.runtime.scriptrunner import StopException
 
-llm_api_key = os.environ.get('OPENAI_API_KEY')
-if llm_api_key is None:
-    raise ValueError("Please provide an OpenAI API Key. Set it as Environment Variable 'OPENAI_API_KEY'")
 
-@st.cache_data
+CHECKPOINT_PATH = Path("./static")
+
+@st.cache_data(show_spinner = False)
+def load_static_data(checkpoint_path):
+    analysed_episodes = AnalyzedEpisodes.load(checkpoint_path)
+    return analysed_episodes.model_dump()
+
+@st.cache_data(show_spinner = False)
 def load_data(url, checkpoint):
+    progress_bar = st.progress(0, "Loading data .. ")
     if url:
-        analyzer = RSSFeedAnalyzer(url, llm_api_key=llm_api_key)
-        checkpoint_path = f"./dev_data/{analyzer.title}.json"
-        if checkpoint and Path(checkpoint_path).exists():
+        llm_api_key = os.environ.get('OPENAI_API_KEY')
+        analyzer = RSSFeedAnalyzer(url,llm_api_key=llm_api_key)
+        checkpoint_path = CHECKPOINT_PATH / f"{analyzer.title}.json"
+        if checkpoint and checkpoint_path.exists():
             analysed_episodes = AnalyzedEpisodes.load(checkpoint_path)
         else:
-            analysed_episodes = analyzer.run(limit=500)
+            
+            if llm_api_key is None:
+                raise ValueError("Please provide an OpenAI API Key. Set it as Environment Variable 'OPENAI_API_KEY'")
+
+            analysed_episodes = analyzer.run_with_streamlit_progress(progress_bar,limit=500)
             analysed_episodes.save_episodes(checkpoint_path)
+        progress_bar.empty()
         return analysed_episodes.model_dump()
+    else:
+        progress_bar.progress(90, "No data found ..")
+        progress_bar.empty()
+        
 
 
-@st.cache_data
-def run_analysis(analysed_episodes, timeline):
+@st.cache_data(show_spinner = False)
+def create_network_graph(analysed_episodes, timeline):
 
     G, global_positions, clusters = build_networkx_graph(analysed_episodes["episodes"], timeline)
     fig, cluster_edge_indices, cluster_node_indices, ranges = create_figure(G, global_positions, clusters)
@@ -54,7 +70,7 @@ def format_dict_to_markdown(data: Dict[str, Union[str, List[str]]]) -> str:
     markdown = []
     for key, value in data.items():
         # Add header for the key
-        markdown.append(f"**{key}**  \n")  # Two spaces at end for line break
+        markdown.append(f"#### {key}  \n")  # Two spaces at end for line break
         
         # Handle list values
         if isinstance(value, list):
@@ -67,63 +83,144 @@ def format_dict_to_markdown(data: Dict[str, Union[str, List[str]]]) -> str:
     
     return "\n".join(markdown)
 
-def main():
-    st.title("RSS Podcast Analyzer")
+def on_select():
+
+    if "plotly_state" in st.session_state:
+        selection = st.session_state.plotly_state
+        if len(selection["selection"]["points"]) > 0:
+            st.session_state.click_selection = True
+        
+            clusters = list(selection["selection"]["points"][0]["customdata"][3].values())
+            if len(clusters) > 0:
+                st.session_state.selected_cluster = list(selection["selection"]["points"][0]["customdata"][3].values())[0]
+            else:
+                st.session_state.selected_cluster =  "All"
+            st.session_state.selection_data = selection["selection"]["points"][0]["customdata"][-1]
+        else:
+            st.session_state.selected_cluster =  "All"
+
+    
+
+def main(analyis_mode):
+    title = "RSS Podcast Explorer"
+    st.set_page_config(page_title=title,layout="wide", initial_sidebar_state="expanded")
+    st.title(title)
+
+    st.caption("✨ Using AI to explore content visually instead of generating it ✨")
     if 'timeline_mode' not in st.session_state:
-        st.session_state.timeline_mode = True
+        st.session_state.timeline_mode = False
     if "timeline_toggle_disabled" not in st.session_state:
-        st.session_state.timeline_toggle_disabled = True
+        st.session_state.timeline_toggle_disabled = False
+    # Initialize session state variables
+    if "selected_podcast" not in st.session_state:
+        st.session_state.selected_podcast = None
+    if "rss_url" not in st.session_state:
+        st.session_state.rss_url = None
+    if "checkpoint" not in st.session_state:
+        st.session_state.checkpoint = True
+    if "selected_cluster" not in st.session_state:
+        st.session_state.selected_cluster = "All"
+    if "selection_data" not in st.session_state:
+        st.session_state.selection_data = None
+    if "click_selection" not in st.session_state:
+        st.session_state.click_selection = False
     
-    rss_url = st.text_input("Enter Podcast RSS Feed URL:", value=None)
+    if analyis_mode == "active":
+        rss_url = st.text_input("Enter Podcast RSS Feed URL:", value=st.session_state.rss_url)
+            # Update session state when RSS URL is provided
+        if rss_url:
+            st.session_state.rss_url = rss_url
+            st.session_state.checkpoint = True
+            analysed_episodes = load_data(rss_url, st.session_state.checkpoint)
+    else:
+        podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
+        
+        selected_podcast = st.selectbox("Choose a podcast:", options=podcasts.keys(), index=0)
+        #st.session_state.rss_url 
+        st.session_state.selected_podcast = selected_podcast
+        analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
+
+
     
-    with st.sidebar:
-        timeline = st.toggle("Timline mode",
-                            value=st.session_state.timeline_mode,
-                            disabled=st.session_state.timeline_toggle_disabled)
     placeholder = st.empty()
-    if rss_url:
-        checkpoint = True
+
+    with st.sidebar:
+        reset = st.button("Rerun analysis")
+        if reset:
+            st.session_state.checkpoint = False
+            #st.rerun()  # Force a rerun to reset the app
+
+    #if st.session_state.rss_url is None:
+    #    with placeholder.container():
+    #        st.write("Please enter an RSS URL to begin analysis.")
+    if True:
         with st.sidebar:
-            reset = st.button("Reset analysis")
-            if reset:
-                checkpoint = False
-        placeholder.progress(0, "Loading data ...")
-        analysed_episodes = load_data(rss_url, checkpoint)
+
+            timeline = st.toggle("Timline mode",
+                                value=st.session_state.timeline_mode,
+                                disabled=st.session_state.timeline_toggle_disabled)
+        
+        
 
         st.session_state.timeline_toggle_disabled = False
-        placeholder.progress(50, "Preparing plot ...")
-        base_fig, cluster_data = run_analysis(analysed_episodes, timeline)           
-        selected_cluster = st.sidebar.selectbox(
-            "Select a cluster to highlight:",
-            options=["<None>"] + list(cluster_data["clusters"]),
-            index=0
-        )
+        
+        base_fig, cluster_data = create_network_graph(analysed_episodes, timeline)
+
+           
+        try:
+            selected_cluster = st.sidebar.selectbox(
+                "Select a cluster to highlight:",
+                options=["All"] + list(cluster_data["clusters"]),
+                index=0
+            )
+        except StopException:
+            selected_cluster = "All"
+
         start_t = time.time()
 
+        if st.session_state.click_selection:
+            selection_value = st.session_state.selected_cluster
+            #reset
+            st.session_state.click_selection = False
+        else:
+            selection_value = selected_cluster
         
         fig = copy.deepcopy(base_fig)
         
-        placeholder.progress(90, "Rendering ...")
         with placeholder.container():
-            updated_fig = update_figure(fig, selected_cluster, cluster_data, timeline)
-            selection = st.plotly_chart(updated_fig,
-                                        use_container_width=True,
-                                        key="network",
-                                        selection_mode=('points',),
-                                        on_select="rerun")
+            updated_fig = update_figure(fig, selection_value, cluster_data, timeline)
+            st.plotly_chart(updated_fig,
+                            use_container_width=True,
+                            key="plotly_state",
+                            selection_mode=('points',),
+                            on_select=on_select)
+            
+        if analyis_mode == "static":
+            st.info("This app is running with static data to keep the costs at a minimim")
+            st.page_link("https://github.com/danielressi/llm-podcast-explorer",
+                                  label="Go to the github page for more infos")
         
         with st.sidebar:
-            st.write(f"Request Took {time.time() - start_t:.2f} seconds")
-            if len(selection["selection"]["points"]) > 0:
-                
-                display_data = copy.deepcopy(selection["selection"]["points"][0]["customdata"][-1])
-                url = display_data.pop("link")
-                st.page_link(url, label="Go to episode", icon="🎧")
-                st.write(format_dict_to_markdown(display_data))
+            st.write(f"Visualized {len(analysed_episodes["episodes"])} episodes in {time.time() - start_t:.2f} seconds, ")
+            #st.write(f"Visualized {} episodes.")
+            if "plotly_state" in st.session_state:                
+                if st.session_state.selection_data:
+                    display_data = st.session_state.selection_data
+                    st.write("### Episode Info ")
+                    if "link" in display_data:
+                        url = display_data.pop("link")
+                        st.page_link(url, label="Go to episode", icon="🎧")
+                    st.write(format_dict_to_markdown(display_data))
         
 
   
         
 
 if __name__ == "__main__":
-    main()
+    analyis_mode = os.environ.get("ANALYSIS_MODE","static")
+    if analyis_mode not in  ["static","active"]:
+        raise ValueError(f"Environment variable ANALYSIS_MODE has to be 'static' or 'active', but got {analyis_mode} ")
+    main(analyis_mode)
+
+    
+

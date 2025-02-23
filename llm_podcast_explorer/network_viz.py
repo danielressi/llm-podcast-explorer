@@ -7,21 +7,7 @@ import pandas as pd
 import numpy as np
 from plotly.subplots import make_subplots
 
-def build_network_graph(episodes):
-    
-    episode_ids = set([ep["insights"]['episode_id'] for ep in episodes])
-    
-    nodes = [{'data': {'id': ep["insights"]['episode_id'], 
-                       'label': ep["insights"]['episode_id'], 
-                       "insights":ep["insights"],
-                       "position": {"x": ep["insights"]["topic_century"]}
-                }   
-            } for ep in episodes]
-    edges = [{'data': {'source': ep["insights"]['episode_id'], 'target': ref_ep}} for ep in episodes for ref_ep in ep["insights"]['referenced_episodes_id'] if ref_ep in episode_ids]
-    
-    return nodes, edges
-
-
+SCALE=1
 def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
         # -------------------------------
     # 2) Build the Main Graph
@@ -29,7 +15,8 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
     G = nx.Graph()
     all_clusters = Counter()
     for ep in episodes:
-        century = ep["insights"]["topic_century"] if ep["insights"]["topic_century"] else 22
+        century = ep["insights"]["topic_century"] if ep["insights"]["topic_century"] else 21
+        cluster_titles = ep["clusters"]["titles"] 
         G.add_node(ep["insights"]['episode_id'], 
                    title=ep["metadata"]["title"], 
                    subtitle=ep["metadata"]["subtitle"],
@@ -41,26 +28,36 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
                                  #topic=ep["insights"]["topic"],
                                  tags=ep["insights"]["tags"],
                                  themes=ep["insights"]["inferred_themes"],
+                                 clusters=cluster_titles,
                                  referenced_episodes=ep["insights"]["referenced_episodes_id"],
                                  link=ep["metadata"]["link"],
                                  year= f'{ep["insights"]["topic_year"]} ({ep["insights"]["topic_century"]} Century)'
                                  ),
-                   cluster=ep["insights"]["inferred_themes"])
-        all_clusters.update(ep["insights"]["inferred_themes"])
+                   cluster=cluster_titles)
+        all_clusters.update(cluster_titles)
+
+    sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
+    min_cluster_size = 3
+    relevant_clusters = sorted_clusters[(sorted_clusters >= min_cluster_size) & (sorted_clusters < len(episodes)*0.8)].index.to_list()
+
+
     edges_data = ()
     referenced_edges = ()
     for ep_x, ep_y in itertools.combinations(episodes, 2):
-        ep_x_clusters = set(ep_x["insights"]["inferred_themes"])
-        ep_y_clusters = set(ep_y["insights"]["inferred_themes"])
+        ep_x_clusters = set(relevant_clusters).intersection(set(ep_x["clusters"]["titles"]))
+        ep_y_clusters = set(relevant_clusters).intersection(set(ep_y["clusters"]["titles"]))
+        references_x = ep_x["insights"]['referenced_episodes_id'] if ep_x["insights"]['referenced_episodes_id'] else []
+        references_y = ep_y["insights"]['referenced_episodes_id'] if ep_y["insights"]['referenced_episodes_id'] else []
         shared_themes = ep_x_clusters.intersection(ep_y_clusters)
-        edge_weight = len(shared_themes) / len(ep_x_clusters.union(ep_y_clusters))
+        union_themes = ep_x_clusters.union(ep_y_clusters)
+        edge_weight = len(shared_themes) / len(union_themes) if len(union_themes) > 0 else 0
         if len(shared_themes) > weight_threshold:
             edges_data += ((ep_x["insights"]['episode_id'], ep_y["insights"]['episode_id'], edge_weight),)
-        elif ep_x["insights"]['episode_id'] in ep_y["insights"]['referenced_episodes_id'] or ep_y["insights"]['episode_id'] in ep_x["insights"]['referenced_episodes_id']:
+        elif ep_x["insights"]['episode_id'] in references_y or ep_y["insights"]['episode_id'] in references_x:
             referenced_edges += ((ep_x["insights"]['episode_id'], ep_y["insights"]['episode_id'], 1),)            
     
     G.add_weighted_edges_from(edges_data,attr="themes")
-    #G.add_weighted_edges_from(referenced_edges, attr="references")
+    G.add_weighted_edges_from(referenced_edges, attr="references")
     # -------------------------------
     # 3) Identify century Buckets
     # -------------------------------
@@ -68,9 +65,10 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
         {century for century in nx.get_node_attributes(G, 'century').values() if century is not None}
     )
     global_positions = {}
-
+    embedding_positions = {node: np.array(G.nodes[node]["embedding"]).mean(axis=0) for node in  G.nodes()}
     if timeline:
-        scale = 100
+        use_y_embedding = True
+        scale = SCALE
         x_positions = {century: century * scale for century in unique_centuries}
 
         for century in unique_centuries:
@@ -79,35 +77,43 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
 
             if len(G_sub.nodes) == 1:
                 # Place single nodes directly
-                global_positions[nodes_in_century[0]] = (x_positions[century], 0)
+                if use_y_embedding:
+                    node = list(G_sub.nodes())[0]
+                    pos_y = embedding_positions[node][0]*scale
+                else:
+                    pos_y = 0 
+                global_positions[nodes_in_century[0]] = (x_positions[century], pos_y)
                 
+            else:
+                # Use Kamada-Kawai layout for better spacing
+                pos = nx.kamada_kawai_layout(G_sub)  
+
+                # Compute centroid
+                x_vals, y_vals = zip(*pos.values()) if pos else ([0], [0])
+                mean_x, mean_y = sum(x_vals)*scale / len(x_vals), sum(y_vals)*scale / len(y_vals)
+
+                # Adjust layout to align centuries
+                shift_x = x_positions[century] - mean_x
+                shift_y = -mean_y  
+
+                # Add slight random jitter to avoid perfect circles
+                jitter = lambda: np.random.uniform(-2*scale/4, 2*scale/4)
             
-            # Use Kamada-Kawai layout for better spacing
-            pos = nx.kamada_kawai_layout(G_sub)  
+                
 
-            # Compute centroid
-            x_vals, y_vals = zip(*pos.values()) if pos else ([0], [0])
-            mean_x, mean_y = sum(x_vals)*scale / len(x_vals), sum(y_vals)*scale / len(y_vals)
-
-            # Adjust layout to align centuries
-            shift_x = x_positions[century] - mean_x
-            shift_y = -mean_y  
-
-            # Add slight random jitter to avoid perfect circles
-            jitter = lambda: np.random.uniform(-2*scale/4, 2*scale/4)
-            
-            for node, (raw_x, raw_y) in pos.items():
-                global_positions[node] = (raw_x + shift_x + jitter(), raw_y + shift_y + jitter())
+                for node, (raw_x, raw_y) in pos.items():
+                    if use_y_embedding:
+                        pos_y = embedding_positions[node][0] *scale
+                    else:
+                        pos_y = raw_y + shift_y + jitter()
+                    global_positions[node] = (raw_x + shift_x + jitter(), pos_y)
 
     else:
-        global_positions = {node: np.array(G.nodes[node]["embedding"]).mean(axis=0) for node in  G.nodes()}
+        global_positions = embedding_positions
         #global_positions = nx.spring_layout(G, seed=42, k=10)
 
         
 
-    sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
-    min_cluster_size = 2
-    relevant_clusters = sorted_clusters[(sorted_clusters >= min_cluster_size) & (sorted_clusters < len(sorted_clusters)*0.75)].index.to_list()
 
     return G, global_positions, relevant_clusters
 
@@ -116,6 +122,14 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
 HIGHLIGHT_COLOR = "#d62728"
 BACKGROUND_COLOR = "rgba(138, 138, 138, 0.2)"
 DEFAULT_NODE_COLOR = "rgba(138, 138, 138, 0.8)"
+
+HOVERTEMPLATE = (
+                    "<b>%{customdata[0]}</b><br>"
+                    "Custers: %{customdata[3]}<br>"
+                    "Themes: %{customdata[1]}<br>"
+                    "<i>Century: %{customdata[2]}</i><br>"
+                    "<extra></extra>"
+                )
 
 def create_figure(G, global_positions, clusters):
     fig = go.Figure()
@@ -166,7 +180,7 @@ def create_figure(G, global_positions, clusters):
         x, y = global_positions[node_name]
         nodes_x.append(x)
         nodes_y.append(y)
-        metadata_list.append([node["title"], node["subtitle"],node["century"], node["on_click"]])
+        metadata_list.append([node["title"], ",".join(node["on_click"]["themes"]),node["century"], node["cluster"], node["on_click"]])
 
         for c in node["cluster"]:
             # not all clusters passed on to selector
@@ -187,7 +201,8 @@ def create_figure(G, global_positions, clusters):
                 line=dict(color="black",width=1)
             ),
             customdata=metadata_list,  # Store node_text in customdata
-            hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br><br><i>Century: %{customdata[2]}</i>",  
+            hoverinfo='none',
+            hovertemplate=HOVERTEMPLATE,
             name="Nodes"
         ),
         #secondary_y=True,
@@ -200,8 +215,8 @@ def create_figure(G, global_positions, clusters):
         #title_font=dict(size=20, color="#333"),  # Dark gray for a clean look
         showlegend=False,
         xaxis=dict(showgrid=True, zeroline=True, visible=True),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False),
-        margin=dict(l=20, r=20, t=20, b=20),
+        yaxis=dict(showgrid=True, zeroline=False, visible=True),
+        #margin=dict(l=20, r=20, t=10, b=10),
         #plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
         #paper_bgcolor="#F0F2F6",  # Ensures smooth blending
     )
@@ -211,7 +226,9 @@ def create_figure(G, global_positions, clusters):
 
 
 def update_figure(fig, selected_cluster, cluster_data, timeline):
-    if selected_cluster == "<None>":
+    if timeline:
+        fig.update_xaxes(title_text='Century')
+    if (selected_cluster == "All") or (selected_cluster not in cluster_data["cluster_edge_indices"]):
         return fig
     else:
         # update edges
@@ -248,7 +265,8 @@ def update_figure(fig, selected_cluster, cluster_data, timeline):
             nodes_y.append(fig.data[1].y[idx])
             nodes_customdata.append(fig.data[1].customdata[idx])
 
-        fig.update_traces(hoverinfo='skip', hovertemplate=None)
+        #fig.update_traces(hovertemplate="Name: %{customdata[0]}")
+        fig.update_traces(hovertemplate=None)
         fig.add_trace(
             go.Scatter(
                 x=nodes_x,
@@ -256,27 +274,30 @@ def update_figure(fig, selected_cluster, cluster_data, timeline):
                 mode='markers',
                 visible=True,
                 marker=dict(
-                    size=20,
+                    size=18,
                     color=HIGHLIGHT_COLOR,
                     line=dict(color="black",width=1)
                 ),
                 customdata=nodes_customdata,  # Store node_text in customdata
-                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}<br><br><i>Century: %{customdata[2]}</i>",  
+                #hoverinfo='none',
+                hovertemplate=HOVERTEMPLATE,
                 name="Nodes-Highlight"
             ),
             #secondary_y=False
         )
         if timeline:
-            x_min = max([min(nodes_x) - 500, min(fig.data[1].x)-100])
-            x_max = min([max(nodes_x) + 500, max(fig.data[1].x)+100])
-            fig.update_layout(xaxis_range=[x_min, x_max])
+            x_min = max([min(nodes_x) - 5*SCALE, min(fig.data[1].x)-SCALE])
+            x_max = min([max(nodes_x) + 5*SCALE, max(fig.data[1].x)+SCALE])
+            #fig.update_layout(xaxis_range=[x_min, x_max])
+            fig.update_xaxes(title_text='Century', range=[x_min, x_max])
+        else:
+            x_std = np.array(fig.data[1].x).std()
+            x_min = max([min(nodes_x) - x_std, min(fig.data[1].x)-(x_std/2)])
+            x_max = min([max(nodes_x) + x_std, max(fig.data[1].x)+(x_std/2)])
+            
+            y_std = np.array(fig.data[1].y).std()
+            y_min = max([min(nodes_y) - y_std, min(fig.data[1].y)-(y_std/2)])
+            y_max = min([max(nodes_y) + y_std, max(fig.data[1].y)+(y_std/2)])
+            fig.update_layout(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
         return fig
-
-
-
-
-if __name__ == "__main__":
-    with open('data.json', 'r') as f:
-        analysed_episodes = json.load(f)
-    G, global_positions, clusters = build_networkx_graph(analysed_episodes["episodes"])
-    fig = create_figure(G, global_positions, "<None>")
+    
