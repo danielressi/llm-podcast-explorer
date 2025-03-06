@@ -1,69 +1,70 @@
-# llm-podcast-explorer
+# LLM Podcast Explorer
 
-[![Release](https://img.shields.io/github/v/release/danielressi/llm-podcast-explorer)](https://img.shields.io/github/v/release/danielressi/llm-podcast-explorer)
-[![Build status](https://img.shields.io/github/actions/workflow/status/danielressi/llm-podcast-explorer/main.yml?branch=main)](https://github.com/danielressi/llm-podcast-explorer/actions/workflows/main.yml?query=branch%3Amain)
-[![codecov](https://codecov.io/gh/danielressi/llm-podcast-explorer/branch/main/graph/badge.svg)](https://codecov.io/gh/danielressi/llm-podcast-explorer)
-[![Commit activity](https://img.shields.io/github/commit-activity/m/danielressi/llm-podcast-explorer)](https://img.shields.io/github/commit-activity/m/danielressi/llm-podcast-explorer)
-[![License](https://img.shields.io/github/license/danielressi/llm-podcast-explorer)](https://img.shields.io/github/license/danielressi/llm-podcast-explorer)
+## Project Setup Guide
 
-This repository allows you to explore your favourite podcast in an interactive visualisation by leveraging the automated analysis of an llm workflow.
+This guide will help you set up the LLM Podcast Explorer project using `uv`. Follow the steps below to get started.
 
-- **Github repository**: <https://github.com/danielressi/llm-podcast-explorer/>
-- **Documentation** <https://danielressi.github.io/llm-podcast-explorer/>
+### Prerequisites
 
-## Getting started with your project
+Before you begin, ensure you have the following installed on your system:
 
-### 1. Create a New Repository
+- Python 3.8 or higher
+- `uv` package
+- `pip` (Python package installer)
+- `git` (version control system)
 
-First, create a repository on GitHub with the same name as this project, and then run the following commands:
+### Installation Steps
 
-```bash
-git init -b main
-git add .
-git commit -m "init commit"
-git remote add origin git@github.com:danielressi/llm-podcast-explorer.git
-git push -u origin main
-```
+1. **Clone the Repository**
 
-### 2. Set Up Your Development Environment
+    Open your terminal and run the following command to clone the repository:
 
-Then, install the environment and the pre-commit hooks with
+    ```bash
+    git clone https://github.com/yourusername/llm-podcast-explorer.git
+    cd llm-podcast-explorer
+    ```
 
-```bash
-make install
-```
+2. **Create a Virtual Environment**
 
-This will also generate your `uv.lock` file
+    It is recommended to create a virtual environment to manage dependencies. Run the following commands:
 
-### 3. Run the pre-commit hooks
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    ```
 
-Initially, the CI/CD pipeline might be failing due to formatting issues. To resolve those run:
+3. **Install Dependencies**
 
-```bash
-uv run pre-commit run -a
-```
+    Install the required packages using `uv`:
 
-### 4. Commit the changes
+    ```bash
+    uv pip install -r pyproject.toml
+    ```
 
-Lastly, commit the changes made by the two steps above to your repository.
+5. **Run the streamlit app**
 
-```bash
-git add .
-git commit -m 'Fix formatting issues'
-git push origin main
-```
+    With static data:
 
-You are now ready to start development on your project!
-The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
+    ```bash
+    ANALYSIS_MODE=static streamlit run llm_podcast_explorer/streamlit_app.py
+    ```
 
-To finalize the set-up for publishing to PyPI, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/codecov/).
+    Active analyis mode:
+    
+    Requires valid openai api key: https://platform.openai.com/account/api-keys
 
-## Releasing a new version
+    ```bash
+    ANALYSIS_MODE=active, OPENAI_API_KEY=<apikey> streamlit run llm_podcast_explorer/streamlit_app.py
+    ```
+
+    This will start the development server and you can access the application at `http://127.0.0.1:8501`.
 
 
+### Contributing
 
----
+If you would like to contribute to this project, please fork the repository and create a pull request. We welcome all contributions!
 
-Repository initiated with [fpgmaas/cookiecutter-uv](https://github.com/fpgmaas/cookiecutter-uv).
+### License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
