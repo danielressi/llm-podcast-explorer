@@ -60,7 +60,7 @@ def create_network_graph(analysed_episodes, timeline):
     return fig, cluster_data
 
 
-def format_dict_to_markdown(data: Dict[str, Union[str, List[str]]]) -> str:
+def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> str:
     """
     Formats a dictionary into markdown text with keys as headers and lists as bullet points.
 
@@ -70,8 +70,20 @@ def format_dict_to_markdown(data: Dict[str, Union[str, List[str]]]) -> str:
     Returns:
         Markdown formatted string
     """
+    episode_title = display_data.pop("title")
+    summary =  display_data.pop("summary")
+    url = display_data.pop("link")
+    
+    st.write(f"### {episode_title} ")
+    st.write(f"{summary}")
+
+    if url != "unknown":
+        st.page_link(url, label="Go to episode", icon="🎧")
+    else:
+        st.write("Could not parse link to episode")
+
     markdown = []
-    for key, value in data.items():
+    for key, value in display_data.items():
         # Add header for the key
         markdown.append(f"#### {key}  \n")  # Two spaces at end for line break
 
@@ -155,13 +167,8 @@ def main(analyis_mode):
     _init_sesion_state()
 
 
-    with st.sidebar:
-        reset = st.button("Rerun analysis")
-        if reset and st.session_state.selected_podcast is not None:
-            st.session_state.checkpoint = False
-            load_data.clear()
-
     if analyis_mode == "active":
+        reset_disabled = False
         rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
         # Update session state when RSS URL is provided
         if rss_url not in [None, "", " "]:
@@ -176,12 +183,18 @@ def main(analyis_mode):
                 st.session_state.selected_podcast = None
     else:
         podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
-
+        reset_disabled = True
         selected_podcast = st.selectbox("Choose a podcast:", options=podcasts.keys(), index=0)
         # st.session_state.rss_url
         st.session_state.selected_podcast = selected_podcast
         analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
 
+    with st.sidebar:
+        reset = st.button("Rerun analysis", disabled=reset_disabled)
+        if reset and st.session_state.selected_podcast is not None:
+            st.session_state.checkpoint = False
+            load_data.clear()
+    
     placeholder = st.empty()
 
     if st.session_state.selected_podcast is None:
@@ -286,13 +299,6 @@ def main(analyis_mode):
             with info_placeholder.container():
                 if st.session_state.click_selection and st.session_state.selection_data:
                     display_data = st.session_state.selection_data
-                    st.write("### Episode Info ")
-                    if "link" in display_data:
-                        url = display_data.pop("link")
-                        if url != "unknown":
-                            st.page_link(url, label="Go to episode", icon="🎧")
-                        else:
-                            st.write("Could not parse link to episode")
                     st.write(format_dict_to_markdown(display_data))
                     st.session_state.click_selection = False
 
