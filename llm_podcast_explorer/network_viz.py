@@ -32,7 +32,7 @@ COLOR_CYCLE =  [
 
 HOVERTEMPLATE = (
                     "<b>%{customdata[0]}</b><br>"
-                    "Summary: %{customdata[5]}<br>" 
+                    "%{customdata[5]}<br>" 
                     "Category: %{customdata[4]}<br>"
                     "Clusters: %{customdata[3]}<br>"
                     "Themes: %{customdata[1]}<br>"
@@ -119,8 +119,8 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
     )
     global_positions = {}
     embedding_positions = {node: np.array(G.nodes[node]["embedding"]).mean(axis=0) for node in  G.nodes()}
+
     if timeline:
-        use_y_embedding = True
         scale = SCALE
         x_positions = {century: century * scale for century in unique_centuries}
 
@@ -128,45 +128,30 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
             nodes_in_century = [n for n in G.nodes if G.nodes[n].get('century') == century]
             G_sub = G.subgraph(nodes_in_century).copy()
 
-            if len(G_sub.nodes) == 1:
-                # Place single nodes directly
-                if use_y_embedding:
-                    node = list(G_sub.nodes())[0]
-                    pos_y = embedding_positions[node][0]*scale
-                else:
-                    pos_y = 0 
-                global_positions[nodes_in_century[0]] = (x_positions[century], pos_y)
-                
-            else:
-                # Use Kamada-Kawai layout for better spacing
-                pos = nx.kamada_kawai_layout(G_sub)  
+            if not G_sub.nodes:
+                continue  # Skip empty subgraphs
 
-                # Compute centroid
-                x_vals, y_vals = zip(*pos.values()) if pos else ([0], [0])
-                mean_x, mean_y = sum(x_vals)*scale / len(x_vals), sum(y_vals)*scale / len(y_vals)
+            for node in G_sub.nodes():
+                meta = G.nodes[node]
+                year = meta.get('year', None)
+                emb_x, emb_y = embedding_positions[node]
 
-                # Adjust layout to align centuries
-                shift_x = x_positions[century] - mean_x
-                shift_y = -mean_y  
+                # Base x-position: spaced by century
+                base_x = x_positions[century]
 
-                # Add slight random jitter to avoid perfect circles
-                jitter = lambda: np.random.uniform(-2*scale/8, 2*scale/8)
-            
-                
+                # Fine-tune within century
+                year_offset = (year % 100) / 100 if year else 0.5  # Normalized year position
+                emb_x_offset = emb_x * (scale / 5)  # Additional x-axis spacing
 
-                for node, (raw_x, raw_y) in pos.items():
-                    if use_y_embedding:
-                        pos_y = embedding_positions[node][0] *scale
-                    else:
-                        pos_y = raw_y + shift_y + jitter()
-                    global_positions[node] = (raw_x + shift_x + jitter(), pos_y)
+                final_x = base_x + year_offset + emb_x_offset
+                final_y = emb_y * scale  # Maintain embedding structure on y-axis
+
+                global_positions[node] = (final_x, final_y)
+    
 
     else:
         global_positions = embedding_positions
-        #global_positions = nx.spring_layout(G, seed=42, k=10)
-
-        
-
+    
 
     return G, global_positions, relevant_clusters
 

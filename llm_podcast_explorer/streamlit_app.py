@@ -119,31 +119,12 @@ def on_select():
     
 
 def main(analyis_mode):
-    title = "CastMap"
+    title = "Podcasts Unraveled"
     st.set_page_config(page_title=title,layout="wide", initial_sidebar_state="expanded")
     st.title(f"{title}")  
     #st.caption("🔍 **Discover the Patterns Behind Your Favorite Podcast**")
     
-    tab1, tab2 = st.tabs(["Viz", "Infos"])
-    with tab2:
-        # App Description  
-        st.markdown(  
-            """  
-            **🔍 Discover the Patterns Behind Your Favorite Podcast**
-            
-            Podcasts are more than just episodes—they’re a web of ideas. CastMap reveals the patterns behind your favorite show,  
-            mapping out themes, connections, and recurring topics. 
 
-            - 📊 **Uncover connections** – See how episodes interlink.  
-            - 🧩 **Spot recurring themes** – Identify the big ideas shaping the podcast.  
-            - 🚀 **Navigate smarter** – Find the most relevant episodes with ease. 
-
-            🎙️ **Start exploring now!**  
-            """ 
-
-        )
-
-    
     if 'timeline_mode' not in st.session_state:
         st.session_state.timeline_mode = False
     if "timeline_toggle_disabled" not in st.session_state:
@@ -173,144 +154,164 @@ def main(analyis_mode):
     if "major_categories" not in st.session_state:
         st.session_state.major_categories = None
 
-    with tab1:
 
+
+    with st.sidebar:
+        reset = st.button("Rerun analysis")
+        if reset and st.session_state.selected_podcast is not None:
+            st.session_state.checkpoint = False
+            load_data.clear()
+
+    if analyis_mode == "active":
+        
+        rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
+            # Update session state when RSS URL is provided
+        if rss_url not in [None, "", " "]:
+            st.session_state.selected_podcast = rss_url
+            try:
+                analysed_episodes = load_data(st.session_state.selected_podcast, 
+                                            st.session_state.checkpoint)
+                # enable cache and checkpoint until reset button is clicked again
+                
+                st.session_state.checkpoint = True
+            except InvalidRSSException as e:
+                st.error(e)
+                st.session_state.selected_podcast = None
+    else:
+        podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
+        
+        selected_podcast = st.selectbox("Choose a podcast:", options=podcasts.keys(), index=0)
+        #st.session_state.rss_url 
+        st.session_state.selected_podcast = selected_podcast
+        analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
+
+
+    
+    placeholder = st.empty()
+
+
+
+    if st.session_state.selected_podcast is None:
+        with placeholder.container():
+            st.markdown("")
+            st.markdown("")
+            st.markdown("")
+            st.markdown(  
+            """ 
+            #### Explore the Big Picture Behind Every Podcast
+
+            Podcasts are full of ideas, connections, and themes—but they’re not always easy to navigate. Podcasts Unraveled helps you break down, explore, and visualize the hidden patterns inside your favorite shows.
+
+            ✨ Discover the core themes – See what a podcast is really about.
+
+            🔗 Follow the connections – Trace how episodes link together.
+
+            🚀 Find the best episodes – Get straight to the topics that matter to you.
+
+
+            🎧 Start Unraveling Now!
+
+            """ 
+
+            )
+    else:
         with st.sidebar:
-            reset = st.button("Rerun analysis")
-            if reset and st.session_state.selected_podcast is not None:
-                st.session_state.checkpoint = False
-                load_data.clear()
 
-        if analyis_mode == "active":
-            rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
-                # Update session state when RSS URL is provided
-            if rss_url:
-                st.session_state.selected_podcast = rss_url
-                try:
-                    analysed_episodes = load_data(st.session_state.selected_podcast, 
-                                                st.session_state.checkpoint)
-                    # enable cache and checkpoint until reset button is clicked again
-                    
-                    st.session_state.checkpoint = True
-                except InvalidRSSException as e:
-                    st.error(e)
-                    st.session_state.selected_podcast = None
-        else:
-            podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
-            
-            selected_podcast = st.selectbox("Choose a podcast:", options=podcasts.keys(), index=0)
-            #st.session_state.rss_url 
-            st.session_state.selected_podcast = selected_podcast
-            analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
+            timeline = st.toggle("Timline mode",
+                                value=st.session_state.timeline_mode,
+                                disabled=st.session_state.timeline_toggle_disabled)
+        
+        
 
+        st.session_state.timeline_toggle_disabled = False
+        
+        base_fig, cluster_data = create_network_graph(analysed_episodes, timeline)
 
         
-        placeholder = st.empty()
-
-
-
-        if st.session_state.selected_podcast is None:
-            with placeholder.container():
-                #time.sleep(10)
-                pass
-        else:
-            with st.sidebar:
-
-                timeline = st.toggle("Timline mode",
-                                    value=st.session_state.timeline_mode,
-                                    disabled=st.session_state.timeline_toggle_disabled)
+        try:
+            major_categories = analysed_episodes["category_2_clusters"]
+            st.session_state.major_categories = major_categories
+            category_options = [ALL_KEY] + list(major_categories.keys())
+            
+            selected_category = st.sidebar.selectbox(
+                "Select a category:",
+                options=category_options,
+                key="category_selection",
+                index=0
+            )
             
             
-
-            st.session_state.timeline_toggle_disabled = False
-            
-            base_fig, cluster_data = create_network_graph(analysed_episodes, timeline)
-
-            
-            try:
-                major_categories = analysed_episodes["category_2_clusters"]
-                st.session_state.major_categories = major_categories
-                category_options = [ALL_KEY] + list(major_categories.keys())
-                
-                selected_category = st.sidebar.selectbox(
-                    "Select a category:",
-                    options=category_options,
-                    key="category_selection",
-                    index=0
-                )
-                
-                
-                if st.session_state.click_reset:
-                    st.session_state.selected_category = ALL_KEY
-                    st.session_state.click_reset = False
-                elif st.session_state.click_selection: 
-                    # st.session_state.selected_cluster already set on_select call
-                    #st.session_state.click_selection = False
-                    pass
-                else:
-                    st.session_state.selected_category = selected_category
-
-                if st.session_state.click_selection:
-                    # filtered_clusters already set on_select call
-                    pass
-                elif st.session_state.selected_category  == ALL_KEY:
-                    st.session_state.filtered_clusters  = {}
-                else:
-                    st.session_state.filtered_clusters  = {c:True for c in major_categories[st.session_state.selected_category]}
-
-            
-            except StopException:
-                st.session_state.click_selection = False
+            if st.session_state.click_reset:
                 st.session_state.selected_category = ALL_KEY
-
-            
-            fig = copy.deepcopy(base_fig)
-            
-            with placeholder.container():
-                updated_fig, zoom_state = update_figure(fig,
-                                            st.session_state.selected_category, 
-                                            st.session_state.filtered_clusters,
-                                            cluster_data,
-                                            timeline,
-                                            st.session_state.click_selection,
-                                            previous_zoom=st.session_state.zoom_state
-                                            )
-                
-                st.session_state.zoom_state = zoom_state
-            
-
-                st.plotly_chart(updated_fig,
-                                use_container_width=True,
-                                key="plotly_state",
-                                selection_mode=('points',),
-                                on_select=on_select,
-                                config=dict(scrollZoom=False, 
-                                            doubleClick='reset+autosize',
-                                            doubleClickDelay= 1000))
-                
-            if analyis_mode == "static":
-                st.info("This app is running with static data. Go to [Github](https://github.com/danielressi/llm-podcast-explorer) page for more options")
-            
-            with st.sidebar:
-                info_placeholder = st.empty()
                 st.session_state.click_reset = False
-                with info_placeholder.container():
-                    if st.session_state.click_selection  and  st.session_state.selection_data:                      
-                        display_data = st.session_state.selection_data
-                        st.write("### Episode Info ")
-                        if "link" in display_data:
-                            url = display_data.pop("link")
-                            if url != "unknown":
-                                st.page_link(url, label="Go to episode", icon="🎧")
-                            else:
-                                st.write("Could not parse link to episode")
-                        st.write(format_dict_to_markdown(display_data))
-                        st.session_state.click_selection = False
-                        
-                    elif st.session_state.selected_cluster == ALL_KEY:
-                        st.write(f"*No episode selected.  \nClick on points to show episode details*")
-                    else:
-                        st.write(f"*Click on a point to show details.*")
+            elif st.session_state.click_selection: 
+                # st.session_state.selected_cluster already set on_select call
+                #st.session_state.click_selection = False
+                pass
+            else:
+                st.session_state.selected_category = selected_category
+
+            if st.session_state.click_selection:
+                # filtered_clusters already set on_select call
+                pass
+            elif st.session_state.selected_category  == ALL_KEY:
+                st.session_state.filtered_clusters  = {}
+            else:
+                st.session_state.filtered_clusters  = {c:True for c in major_categories[st.session_state.selected_category]}
+
+        
+        except StopException:
+            st.session_state.click_selection = False
+            st.session_state.selected_category = ALL_KEY
+
+        
+        fig = copy.deepcopy(base_fig)
+        
+        with placeholder.container():
+            updated_fig, zoom_state = update_figure(fig,
+                                        st.session_state.selected_category, 
+                                        st.session_state.filtered_clusters,
+                                        cluster_data,
+                                        timeline,
+                                        st.session_state.click_selection,
+                                        previous_zoom=st.session_state.zoom_state
+                                        )
+            
+            st.session_state.zoom_state = zoom_state
+        
+
+            st.plotly_chart(updated_fig,
+                            use_container_width=True,
+                            key="plotly_state",
+                            selection_mode=('points',),
+                            on_select=on_select,
+                            config=dict(scrollZoom=False, 
+                                        doubleClick='reset+autosize',
+                                        doubleClickDelay= 1000))
+            
+        if analyis_mode == "static":
+            st.info("This app is running with static data. Go to [Github](https://github.com/danielressi/llm-podcast-explorer) page for more options")
+        
+        with st.sidebar:
+            info_placeholder = st.empty()
+            st.session_state.click_reset = False
+            with info_placeholder.container():
+                if st.session_state.click_selection  and  st.session_state.selection_data:                      
+                    display_data = st.session_state.selection_data
+                    st.write("### Episode Info ")
+                    if "link" in display_data:
+                        url = display_data.pop("link")
+                        if url != "unknown":
+                            st.page_link(url, label="Go to episode", icon="🎧")
+                        else:
+                            st.write("Could not parse link to episode")
+                    st.write(format_dict_to_markdown(display_data))
+                    st.session_state.click_selection = False
+                    
+                elif st.session_state.selected_cluster == ALL_KEY:
+                    st.write(f"*No episode selected.  \nClick on points to show episode details*")
+                else:
+                    st.write(f"*Click on a point to show details.*")
             
         st.caption("✨ Using AI to explore content visually instead of generating it ✨")
     

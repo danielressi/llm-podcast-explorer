@@ -186,7 +186,7 @@ class RSSFeedAnalyzer:
         ]).partial(format_instructions=parser.get_format_instructions(),
                     podcast=self.rss_loader.title, 
                     tag_limit=5,
-                    theme_limit=2,
+                    theme_limit=3,
                     podcast_description=self.rss_loader.description)
     
 
@@ -399,10 +399,10 @@ class RSSFeedAnalyzer:
                 
                 Consider the following guidelines:
                     - Generalsation: Capturing the bigger ideas and topics behind the selected documents.
-                    - Relevance: The title should reflect the core ideas, topics, or narratives present in the documents.
+                    - Relevance: The title must reflect the core ideas, topics, or narratives present in the documents.
                     - Targeted: Depending on the content the titles should be factual, funny, dramatic etc.
                     - Conciseness: Keep the title concise ideally no longer than 5 words.
-                    - Cohesion: The title must be a cohesive and meaningful for humans
+                    - Cohesion: The title must be a cohesive, meaningful and correct with respect to the context
                                  
                 Constraints (Hard rules): 
                  - The output list must be the same length as the input list
@@ -550,7 +550,7 @@ class RSSFeedAnalyzer:
                 You will be provided with a list of titles and your task is to group related titles together into higher level topics (major categories).
                 
                 Consider the following guidelines:
-                    - Generalsation: Capturing the bigger picture of groups of titles is essential. It should provide a broad grouping
+                    - Generalsation: Capturing the bigger picture of groups of titles is essential. It should provide a broad grouping but still sub categories of the podcast itself.
                     - Relevance: The identified parent topics should be unique and only related titles should be grouped together
                     - Completeness: Every title should be assigned to a category. You can create also one or more category for diverse leftover titles, as long as the category should reflect this.
                     - Conciseness: Keep the title concise ideally no longer than 5 words.
