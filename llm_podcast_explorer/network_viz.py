@@ -1,13 +1,10 @@
-import networkx as nx
-import plotly.graph_objects as go
-import json
 import itertools
 from collections import Counter
-import pandas as pd
+
+import networkx as nx
 import numpy as np
-from plotly.subplots import make_subplots
-import plotly.express as px
-import textwrap
+import pandas as pd
+import plotly.graph_objects as go
 
 SCALE = 1
 HIGHLIGHT_COLOR = "rgba(214, 39, 40, 1)"
@@ -69,7 +66,7 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
                 themes=ep["insights"]["inferred_themes"],
                 category=category,
                 clusters=cluster_titles,
-                clusters_raw=ep["clusters"]["titles"],
+                #clusters_raw=ep["clusters"]["titles"],
                 cluster_attempt=ep["clusters"]["attempt"],
                 referenced_episodes=ep["insights"]["referenced_episodes_id"],
                 link=ep["metadata"]["link"],
@@ -81,15 +78,13 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
         all_clusters.update(cluster_titles)
 
     sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
-    min_cluster_size = 2
+    #min_cluster_size = 2
     # relevant_clusters = sorted_clusters[(sorted_clusters >= min_cluster_size) & (sorted_clusters < len(episodes["episodes"])*0.8)].index.to_list()
     relevant_clusters = sorted_clusters.index.to_list()
 
     edges_data = ()
     referenced_edges = ()
     for ep_x, ep_y in itertools.combinations(episodes["episodes"], 2):
-        # ep_x_clusters = set(relevant_clusters).intersection(set(ep_x["clusters"]["titles"]))
-        # ep_y_clusters = set(relevant_clusters).intersection(set(ep_y["clusters"]["titles"]))
         ep_x_id = ep_x["metadata"]["index"]
         ep_y_id = ep_y["metadata"]["index"]
         if f"{ep_x_id},{ep_y_id}" in distance_map:
@@ -101,9 +96,7 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
 
         references_x = ep_x["insights"]["referenced_episodes_id"] if ep_x["insights"]["referenced_episodes_id"] else []
         references_y = ep_y["insights"]["referenced_episodes_id"] if ep_y["insights"]["referenced_episodes_id"] else []
-        # shared_themes = ep_x_clusters.intersection(ep_y_clusters)
-        # union_themes = ep_x_clusters.union(ep_y_clusters)
-        # edge_weight = len(shared_themes) / len(union_themes) if len(union_themes) > 0 else 0
+
         if distance <= EDGE_COSINE_THRESHOLD:
             edges_data += ((ep_x["insights"]["episode_id"], ep_y["insights"]["episode_id"], 2 - distance),)
         elif ep_x["insights"]["episode_id"] in references_y or ep_y["insights"]["episode_id"] in references_x:
@@ -156,7 +149,6 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
 
 def create_figure(G, global_positions, clusters):
     fig = go.Figure()
-    # fig = make_subplots(specs=[[{"secondary_y": True}]])
     cluster_edges_indices = {c: set() for c in clusters}
     cluster_node_indices = {c: set() for c in clusters}
     edge_x = []
@@ -188,7 +180,6 @@ def create_figure(G, global_positions, clusters):
             showlegend=False,
             name="Edges",
         ),
-        # secondary_y=True,
     )
 
     index_offset = 0  # len(G.edges())
@@ -232,8 +223,7 @@ def create_figure(G, global_positions, clusters):
             hoverinfo="none",
             hovertemplate=HOVERTEMPLATE,
             name="Nodes",
-        ),
-        # secondary_y=True,
+        )
     )
 
     fig.update_layout(
@@ -285,8 +275,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 hoverinfo="none",
                 visible=filtered_clusters[selected_cluster],
                 name="Edges-Highlight",
-            ),
-            # secondary_y=False,
+            )
         )
 
         # update nodes
@@ -320,11 +309,9 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                     bordercolor=highlight_color  # Border color
                 ),
                 name=selected_cluster,
-            ),
-            # secondary_y=False
+            )
         )
-    # nodes_df = pd.concat(nodes_df)
-    # fig.add_trace(px.scatter(nodes_df, x="x",y="y",color="cluster"))
+
 
     zoom_info = None
     if timeline:

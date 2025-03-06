@@ -1,16 +1,13 @@
-import streamlit as st
-import json
-from rss_feed_loader import InvalidRSSException
-from rss_feed_analyzer import RSSFeedAnalyzer, AnalyzedEpisodes
-import os
-from network_viz import build_networkx_graph, create_figure, update_figure
 import copy
-import time
-from typing import Dict, Union, List
+import os
 from pathlib import Path
-from streamlit.runtime.scriptrunner import StopException
-import time
+from typing import Dict, List, Union
 
+import streamlit as st
+from network_viz import build_networkx_graph, create_figure, update_figure
+from rss_feed_analyzer import AnalyzedEpisodes, RSSFeedAnalyzer
+from rss_feed_loader import InvalidRSSException
+from streamlit.runtime.scriptrunner import StopException
 
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
@@ -295,11 +292,11 @@ def main(analyis_mode):
                     st.session_state.click_selection = False
 
                 elif st.session_state.selected_cluster == ALL_KEY:
-                    st.write(f"*No episode selected.  \nClick on points to show episode details*")
+                    st.write("*No episode selected.  \nClick on points to show episode details*")
                 else:
-                    st.write(f"*Click on a point to show details.*")
+                    st.write("*Click on a point to show details.*")
 
-        st.caption("✨ Using AI to explore content visually instead of generating it ✨")
+        st.caption("✨ Leveraging AI to explore content instead of generating it ✨")
 
 
 if __name__ == "__main__":

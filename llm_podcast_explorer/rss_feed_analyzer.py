@@ -1,110 +1,33 @@
-# from langchain_community.document_loaders import RSSFeedLoader
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda, RunnableParallel
-from langchain_core.output_parsers import PydanticOutputParser, JsonOutputParser
+import itertools
+import json
+import logging
+import os
+from typing import Dict, List
+
+import numpy as np
+import pandas as pd
+import umap
+from hdbscan import HDBSCAN as HDBSCAN
+from hdbscan.prediction import all_points_membership_vectors
+from langchain.embeddings import CacheBackedEmbeddings
 from langchain.output_parsers import RetryOutputParser
 from langchain.storage import LocalFileStore
-from langchain.embeddings import CacheBackedEmbeddings
 from langchain_community.cache import SQLiteCache
 from langchain_core.globals import set_llm_cache
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda, RunnableParallel
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-
-# from langchain_community.vectorstores.faiss import FAISS
-from pydantic import BaseModel, Field, RootModel, field_validator, AliasChoices
-from typing import Dict, List, Any, Optional, Tuple
-
-from sklearn.preprocessing import normalize
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import HDBSCAN as HDBSCAN_SKLEARN
+from pydantic import BaseModel, Field, RootModel
+from rss_feed_loader import RSSFeedLoader
 from sklearn.metrics import pairwise_distances
-from hdbscan import HDBSCAN as HDBSCAN, BranchDetector
+from sklearn.preprocessing import StandardScaler, normalize
 
-from hdbscan.prediction import all_points_membership_vectors
-import pandas as pd
-import json
-import numpy as np
-import os
-from pathlib import Path
-import logging
-import itertools
-import umap
-
-from rss_feed_loader import RSSFeedLoader, RSSFeedItem
+from episodes_model import AnalyzedEpisodes,  Episode, EpisodeInsights, ClusteredEpisodeInsights
 
 COSINE_DISTANCE_THRESHOLD = 0.5
 
-
-class EpisodeInsights(BaseModel):
-    """Information about a person."""
-
-    episode_id: str = Field(
-        ..., description="The unique identifier of the episode extracted from title or description."
-    )
-    topic: str = Field(..., description="The topic of the episode.")
-    summary: str = Field(..., description="Short summary of the episode")
-    topic_year: Optional[int] = Field(
-        default=None,
-        description="The year related to the topic not the episode (Best guess if not explicitly mentioned)",
-    )
-    topic_century: Optional[int] = Field(
-        default=None, description="The century related to the topic (Best guess if not explicitly mentioned)"
-    )
-    tags: List[str] = Field(..., description="Enriched tags associated with the episode.")
-    inferred_themes: List[str] = Field(..., description="Common themes that seem to fit to the episode.")
-    referenced_episodes_id: Optional[List[str]] = Field(
-        ..., description="Referenced episodes in this episode. Needs to match episode_id schema"
-    )
-
-
-class ClusteredEpisodeInsights(BaseModel):
-    titles: List[str] = Field(..., description="Cluster titles")
-    consolidated_titles: Optional[List[str]] = Field(default=None, description="Cluster titles")
-    ids: List[int] = Field(..., description="Cluster ids of the episode.")
-    embeddings: Optional[Any] = Field(default=None, description="Umap embeddings")
-    major_category: Optional[str] = Field(
-        default=None, description="major categories are the higher level groupings of clusters"
-    )
-    attempt: Optional[int] = Field(
-        default=None, description="Number of consecutive clustering attempts until noise label was removed"
-    )
-
-    @field_validator("titles", mode="before")
-    def wrap_string_in_list(cls, v):
-        if isinstance(v, str):
-            return [v]
-        return v
-
-
-class Episode(BaseModel):
-    metadata: RSSFeedItem = Field(..., description="Metadata of the episode.")
-    insights: EpisodeInsights = Field(..., description="Insights of the episode.")
-    clusters: Optional[ClusteredEpisodeInsights] = Field(default=None, description="Mapping from insights to clusters")
-
-
-class AnalyzedEpisodes(BaseModel):
-    episodes: List[Episode] = Field(..., description="A list of analyzed episodes.")
-    category_2_clusters: Optional[Dict[str, List[str]]] = Field(
-        default=None, description="Mapping from major categories to clusters"
-    )
-    distance_map: Optional[Dict[str, float]] = Field(default=None, description="Cosine distances for episode pairs")
-    extra: Optional[Dict[str, Any]] = Field(
-        default={}, description="Placeholder for storing any other data for analysis"
-    )
-
-    def save_episodes(self, file_path: str):
-        Path(file_path).parent.mkdir(exist_ok=True, parents=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(self.model_dump_json(indent=4))
-
-    @classmethod
-    def load(cls, file_path: str | Path):
-        with open(str(file_path), "r", encoding="utf-8") as f:
-            data = json.load(f)
-        episodes = [Episode(**episode) for episode in data["episodes"]]
-        return cls(
-            episodes=episodes, category_2_clusters=data["category_2_clusters"], distance_map=data["distance_map"]
-        )
 
 
 class Mapping(RootModel):
@@ -293,7 +216,7 @@ class RSSFeedAnalyzer:
         clusters_top_3_proba = pd.DataFrame(
             soft_clusters.apply(lambda x: np.sort(x.values)[::-1][:3], axis=1).to_list()
         )
-        clusters_top_3[clusters_top_3_proba < 0.05] = -1
+        clusters_top_3[clusters_top_3_proba < 0.08] = -1
         clusters_top_3.loc[:, 0] = c_model.labels_ + cluster_offset
         return clusters_top_3
 
@@ -510,12 +433,12 @@ class RSSFeedAnalyzer:
                 3. **Partial Overlap**: Titles, which are similar in a sense that they are sub topics of a broader topic, should not be consolidated.
                 5. **Simplicity**: The consolidated titles should be concise and must not overstate the orignal meaning
                 6. **Precision**: Near semantic duplicates must be consolidated, but do not merge titles if you are unsure or if the consolidated group gets too broad
+                7. **Representativeness: The consolidated title must plausible and correctly represent the merged titles.
 
                 ### **Constraints (Hard rules):**
                 - The original language ({language}) must be maintained. 
                 - The output must be a valid JSON in the format: {schema}
                 - Unique titles should be ommitted from the mapping
-        
 
                 """,
             ),
@@ -656,10 +579,10 @@ class RSSFeedAnalyzer:
             progress_bar.progress(50, f"Clustering {','.join(keys)}...")
             text_catalog = self._create_text_catalog(analysed_episodes.episodes, keys=keys)
             theme_clusters = self._cluster_text_catalog(text_catalog)
-            progress_bar.progress(70, f"Consolidating clusters ...")
+            progress_bar.progress(70, "Consolidating clusters ...")
             consolidated_episodes = self._consolidate_themes(analysed_episodes, theme_clusters)
         else:
-            progress_bar.progress(50, f"Clustering episode summaries ...")
+            progress_bar.progress(50, "Clustering episode summaries ...")
             text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
             summary_clusters, distance_map = self._cluster_text_catalog(text_catalog)
             progress_bar.progress(70, f"Creating cluster titles with {self.llm.model_name}...")

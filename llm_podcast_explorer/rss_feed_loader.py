@@ -1,9 +1,9 @@
 import re
-import requests
-from urllib.parse import urlparse
-from pydantic import BaseModel, Field, RootModel, field_validator, AliasChoices
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, List, Optional
+
 import feedparser
+import requests
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class RSSFeedItem(BaseModel):
