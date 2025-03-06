@@ -24,10 +24,9 @@ from rss_feed_loader import RSSFeedLoader
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler, normalize
 
-from episodes_model import AnalyzedEpisodes,  Episode, EpisodeInsights, ClusteredEpisodeInsights
+from episodes_model import AnalyzedEpisodes, Episode, EpisodeInsights, ClusteredEpisodeInsights
 
 COSINE_DISTANCE_THRESHOLD = 0.5
-
 
 
 class Mapping(RootModel):

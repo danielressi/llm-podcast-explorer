@@ -186,6 +186,8 @@ def main(analyis_mode):
             st.markdown("")
             st.markdown("")
             st.markdown("")
+            st.markdown("")
+            st.markdown("")
             st.markdown(
                 """ 
             #### Explore the Big Picture Behind Every Podcast

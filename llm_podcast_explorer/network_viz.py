@@ -66,7 +66,7 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
                 themes=ep["insights"]["inferred_themes"],
                 category=category,
                 clusters=cluster_titles,
-                #clusters_raw=ep["clusters"]["titles"],
+                # clusters_raw=ep["clusters"]["titles"],
                 cluster_attempt=ep["clusters"]["attempt"],
                 referenced_episodes=ep["insights"]["referenced_episodes_id"],
                 link=ep["metadata"]["link"],
@@ -78,7 +78,7 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
         all_clusters.update(cluster_titles)
 
     sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
-    #min_cluster_size = 2
+    # min_cluster_size = 2
     # relevant_clusters = sorted_clusters[(sorted_clusters >= min_cluster_size) & (sorted_clusters < len(episodes["episodes"])*0.8)].index.to_list()
     relevant_clusters = sorted_clusters.index.to_list()
 
@@ -311,7 +311,6 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 name=selected_cluster,
             )
         )
-
 
     zoom_info = None
     if timeline:

@@ -55,7 +55,6 @@ class RSSFeedLoader:
 
     @staticmethod
     def _init_feed(url):
-
         feed_url = ApplePodcastRSS().get_feed_url(url) if "podcasts.apple.com" in url else url
 
         feed = feedparser.parse(feed_url)
