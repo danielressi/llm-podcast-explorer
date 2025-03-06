@@ -118,8 +118,6 @@ select = [
     "TRY",
 ]
 ignore = [
-    # LineTooLong
-    "E501",
     # DoNotAssignLambda
     "E731",
     "TRY003", # external messages in exceptions are too verbose

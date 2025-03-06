@@ -116,13 +116,7 @@ def on_select():
             st.session_state.click_selection = False
             st.session_state.click_reset = True
 
-
-def main(analyis_mode):
-    title = "Podcasts Unraveled"
-    st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
-    st.title(f"{title}")
-    # st.caption("🔍 **Discover the Patterns Behind Your Favorite Podcast**")
-
+def _init_sesion_state():
     if "timeline_mode" not in st.session_state:
         st.session_state.timeline_mode = False
     if "timeline_toggle_disabled" not in st.session_state:
@@ -151,6 +145,15 @@ def main(analyis_mode):
         st.session_state.zoom_state = None
     if "major_categories" not in st.session_state:
         st.session_state.major_categories = None
+
+
+def main(analyis_mode):
+    title = "Podcasts Unraveled"
+    st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
+    st.title(f"{title}")
+
+    _init_sesion_state()
+
 
     with st.sidebar:
         reset = st.button("Rerun analysis")
@@ -218,7 +221,7 @@ def main(analyis_mode):
         try:
             major_categories = analysed_episodes["category_2_clusters"]
             st.session_state.major_categories = major_categories
-            category_options = [ALL_KEY] + list(major_categories.keys())
+            category_options = [ALL_KEY] + list(sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)) #list(major_categories.keys())
 
             selected_category = st.sidebar.selectbox(
                 "Select a category:", options=category_options, key="category_selection", index=0
@@ -293,10 +296,11 @@ def main(analyis_mode):
                     st.write(format_dict_to_markdown(display_data))
                     st.session_state.click_selection = False
 
-                elif st.session_state.selected_cluster == ALL_KEY:
-                    st.write("*No episode selected.  \nClick on points to show episode details*")
+                elif st.session_state.selected_cluster in [None, ALL_KEY]:
+                    st.write("*Select a category to start unravelling the themes and topics of the podcast*")
+                    st.write("*Click on a point to show episode details.*")
                 else:
-                    st.write("*Click on a point to show details.*")
+                    st.write("*Click on a point to show episode details.*")
 
         st.caption("✨ Leveraging AI to explore content instead of generating it ✨")
 

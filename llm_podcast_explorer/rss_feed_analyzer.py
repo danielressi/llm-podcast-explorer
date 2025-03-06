@@ -427,18 +427,15 @@ class RSSFeedAnalyzer:
                     - **Values**: A list of redundant titles that are unified to the consolidated title. 
 
                 ### **Guidelines for Consolidation:**  
-                1. **Redundancy**: If a title does not introduce new information it should be merged with the related title.  
-                2. **Uniqueness**: Titles that contain distinct meanings or cannot be grouped should remain unchanged.  
-                3. **Partial Overlap**: Titles, which are similar in a sense that they are sub topics of a broader topic, should not be consolidated.
-                5. **Simplicity**: The consolidated titles should be concise and must not overstate the orignal meaning
-                6. **Precision**: Near semantic duplicates must be consolidated, but do not merge titles if you are unsure or if the consolidated group gets too broad
-                7. **Representativeness: The consolidated title must plausible and correctly represent the merged titles.
+                1. **Redundancy**: If a title does not introduce new information (semantic duplicates) it should be merged with the related title.  
+                2. **Simplicity**: The consolidated titles should be concise and must not overstate the orignal meaning
+                3. **Precision**: Do not merge titles if you are unsure or if the consolidated group gets too broad or relevant information gets lost
+                4. **Representativeness: The consolidated title must plausible and correctly represent the merged titles.
 
                 ### **Constraints (Hard rules):**
                 - The original language ({language}) must be maintained. 
                 - The output must be a valid JSON in the format: {schema}
                 - Unique titles should be ommitted from the mapping
-
                 """,
             ),
             ("user", "Input: {data}"),
@@ -475,7 +472,7 @@ class RSSFeedAnalyzer:
                 # remove noise cluster from episodes with one or more dedicated clusters
                 ep_clusters_df = ep_clusters_df.query("clusters != -1")
             if len(ep_clusters_df) > 0:
-                ep_copy.clusters.consolidated_titles = ep_clusters_df["consolidated_titles"].to_list()
+                ep_copy.clusters.consolidated_titles = ep_clusters_df["consolidated_titles"].unique().tolist()
                 ep_copy.clusters.ids = ep_clusters_df["clusters"].to_list()
 
             consolidated_episodes.append(ep_copy)
@@ -510,8 +507,8 @@ class RSSFeedAnalyzer:
         chain = prompt_template | self.llm | parser
         self.logger.info("Consolidating episodes")
 
-        cluster_titles = clusters_df.groupby("cluster")["consolidated_title"].first()
-        cluster_titles_doc = ",".join(cluster_titles.to_list())
+        cluster_titles = clusters_df["consolidated_title"].unique().tolist()
+        cluster_titles_doc = ",".join(cluster_titles)
 
         major_categories = chain.invoke(cluster_titles_doc)
 

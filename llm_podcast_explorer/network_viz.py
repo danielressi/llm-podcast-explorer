@@ -51,6 +51,7 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
     for ep in episodes["episodes"]:
         century = ep["insights"]["topic_century"] if ep["insights"]["topic_century"] else 21
         cluster_titles = ep["clusters"]["consolidated_titles"]
+        show_titles = ep["clusters"]["consolidated_titles"]
 
         category = [clusters_2_category[cluster] for cluster in cluster_titles if cluster in clusters_2_category]
         G.add_node(
@@ -64,18 +65,18 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
                 summary=ep["insights"]["summary"],
                 tags=ep["insights"]["tags"],
                 themes=ep["insights"]["inferred_themes"],
-                category=category,
-                clusters=cluster_titles,
+                #category=category,
+                #clusters=", ".join(cluster_titles),
                 # clusters_raw=ep["clusters"]["titles"],
                 cluster_attempt=ep["clusters"]["attempt"],
                 referenced_episodes=ep["insights"]["referenced_episodes_id"],
                 link=ep["metadata"]["link"],
                 year=f"{ep['insights']['topic_year']} ({ep['insights']['topic_century']} Century)",
             ),
-            cluster=cluster_titles,
+            cluster=show_titles,
             category=category,
         )
-        all_clusters.update(cluster_titles)
+        all_clusters.update(show_titles)
 
     sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
     # min_cluster_size = 2
@@ -196,7 +197,7 @@ def create_figure(G, global_positions, clusters):
         nodes_y.append(y)
         metadata_list.append([
             node["title"],
-            ",".join(node["on_click"]["themes"]),
+            ", ".join(node["on_click"]["themes"]),
             node["century"],
             node["cluster"],
             list(set(node["category"])),
