@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import feedparser
 import requests
@@ -22,7 +22,7 @@ class RSSFeedItem(BaseModel):
         ),
     )
     published: str = Field(..., description="The date the episode was published")
-    tags: Optional[List[Any]] = Field(default=None, description="Tags associated with the episode")
+    tags: Optional[list[Any]] = Field(default=None, description="Tags associated with the episode")
 
     def _extract_link(v):
         if "href" in v:
@@ -55,10 +55,8 @@ class RSSFeedLoader:
 
     @staticmethod
     def _init_feed(url):
-        if "podcasts.apple.com" in url:
-            feed_url = ApplePodcastRSS().get_feed_url(url)
-        else:
-            feed_url = url
+
+        feed_url = ApplePodcastRSS().get_feed_url(url) if "podcasts.apple.com" in url else url
 
         feed = feedparser.parse(feed_url)
         if feed.bozo:
@@ -87,7 +85,7 @@ class ApplePodcastRSS:
     def get_feed_url(cls, podcast_url: str) -> str:
         """Extracts the podcast ID and fetches the feed URL from the iTunes API."""
         podcast_id = cls.extract_podcast_id(podcast_url)
-        response = requests.get(cls.BASE_LOOKUP_URL.format(podcast_id))
+        response = requests.get(cls.BASE_LOOKUP_URL.format(podcast_id), timeout=30)
 
         if response.status_code != 200:
             raise ConnectionError(f"Failed to fetch data from iTunes API. Status code: {response.status_code}")
