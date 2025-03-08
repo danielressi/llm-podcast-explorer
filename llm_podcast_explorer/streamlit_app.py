@@ -162,7 +162,7 @@ def _init_sesion_state():
 
 
 def main(analyis_mode):
-    title = "Podcasts Unraveled"
+    title = "Podcasts Explored"
     st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
     st.title(f"{title}")
 
@@ -210,10 +210,10 @@ def main(analyis_mode):
             st.markdown("")
             st.markdown("")
             st.markdown(
-                """ 
+                f""" 
             #### Explore the Big Picture Behind Every Podcast
 
-            Podcasts are full of ideas, connections, and themes—but they’re not always easy to navigate. Podcasts Unraveled helps you break down, explore, and visualize the hidden patterns inside your favorite shows.
+            Podcasts are full of ideas, connections, and themes—but they’re not always easy to navigate. {title} helps you break down, explore, and visualize the hidden patterns inside your favorite shows.
 
             ✨ Discover the core themes – See what a podcast is really about.
 
@@ -222,7 +222,7 @@ def main(analyis_mode):
             🚀 Find the best episodes – Get straight to the topics that matter to you.
 
 
-            🎧 Start Unraveling Now!
+            🎧 Start Exploring Now!
 
             """
             )
