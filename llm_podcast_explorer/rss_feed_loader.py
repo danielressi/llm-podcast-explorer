@@ -16,10 +16,7 @@ class RSSFeedItem(BaseModel):
     link: str = Field(
         ...,
         description="The link to the episode",
-        validation_alias=AliasChoices(
-            "link",
-            "links",
-        ),
+        validation_alias=AliasChoices( "links", "link"),
     )
     published: str = Field(..., description="The date the episode was published")
     tags: Optional[list[Any]] = Field(default=None, description="Tags associated with the episode")
@@ -37,7 +34,11 @@ class RSSFeedItem(BaseModel):
         if isinstance(v, dict):
             return cls._extract_link(v)
         elif isinstance(v, list):
-            return cls._extract_link(v[0])
+            audio_link = [link for link in v if link["type"] == "audio/mpeg"]
+            if len(audio_link) > 0:
+                return cls._extract_link(audio_link[0])
+            else:
+                return cls._extract_link(v[0])
         else:
             return "unknown"
 
@@ -66,7 +67,9 @@ class RSSFeedLoader:
     def lazy_load(self):
         for i, entry in enumerate(self.feed.entries):
             entry["index"] = i
-            yield RSSFeedItem(**entry)
+            rss_item = RSSFeedItem(**entry)
+            if len(rss_item.description) > 0:
+                yield rss_item
 
 
 class ApplePodcastRSS:

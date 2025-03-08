@@ -74,27 +74,29 @@ def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> s
     summary =  display_data.pop("summary")
     url = display_data.pop("link")
     
+    
     st.write(f"### {episode_title} ")
     st.write(f"{summary}")
 
     if url != "unknown":
-        st.page_link(url, label="Go to episode", icon="🎧")
+        st.page_link(url, label="Listen to episode", icon="🎧")
     else:
         st.write("Could not parse link to episode")
 
     markdown = []
     for key, value in display_data.items():
         # Add header for the key
-        markdown.append(f"#### {key}  \n")  # Two spaces at end for line break
+        if len(value) > 0:
+            markdown.append(f"#### {key}  \n")  # Two spaces at end for line break
 
-        # Handle list values
-        if isinstance(value, list):
-            markdown.extend([f"- {item}" for item in value])
-        # Handle string values
-        else:
-            markdown.append(f"{value}")
+            # Handle list values
+            if isinstance(value, list):
+                markdown.extend([f"- {item}" for item in value])
+            # Handle string values
+            else:
+                markdown.append(f"{value}")
 
-        markdown.append("\n")  # Add spacing between sections
+            markdown.append("\n")  # Add spacing between sections
 
     return "\n".join(markdown)
 
@@ -184,10 +186,12 @@ def main(analyis_mode):
     else:
         podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
         reset_disabled = True
-        selected_podcast = st.selectbox("Choose a podcast:", options=podcasts.keys(), index=0)
-        # st.session_state.rss_url
+        selected_podcast = st.selectbox("Choose a podcast:", options=sorted(podcasts.keys()), index=None)
         st.session_state.selected_podcast = selected_podcast
-        analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
+
+        # st.session_state.rss_url
+        if st.session_state.selected_podcast is not None:
+            analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
 
     with st.sidebar:
         reset = st.button("Rerun analysis", disabled=reset_disabled)
@@ -199,6 +203,7 @@ def main(analyis_mode):
 
     if st.session_state.selected_podcast is None:
         with placeholder.container():
+            st.markdown("")
             st.markdown("")
             st.markdown("")
             st.markdown("")
@@ -275,6 +280,7 @@ def main(analyis_mode):
                 timeline,
                 st.session_state.click_selection,
                 previous_zoom=st.session_state.zoom_state,
+                selection_state=st.session_state.selection_state 
             )
 
             st.session_state.zoom_state = zoom_state
@@ -303,10 +309,23 @@ def main(analyis_mode):
                     st.session_state.click_selection = False
 
                 elif st.session_state.selected_cluster in [None, ALL_KEY]:
-                    st.write("*Select a category to start unravelling the themes and topics of the podcast*")
-                    st.write("*Click on a point to show episode details.*")
+                    st.write(
+                    """
+                    **Tips:**
+
+                    - Select a category to start unravelling the themes and topics of the podcast
+                    - Click on a point to show episode details.
+                    """
+                    )
+                    
                 else:
-                    st.write("*Click on a point to show episode details.*")
+                                        """
+                    **Tips:**
+
+                    - Enable/disable clusters by clicking the names in the legend.
+                    -  Select a cluster by double clicking the name on the legend.
+                    - Click on a point to show episode details.
+                    """
 
         st.caption("✨ Leveraging AI to explore content instead of generating it ✨")
 

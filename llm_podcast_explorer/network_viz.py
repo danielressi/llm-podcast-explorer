@@ -219,7 +219,6 @@ def create_figure(G, global_positions, clusters):
             visible=True,
             showlegend=False,
             marker=dict(size=12, color=DEFAULT_NODE_COLOR, line=dict(color="black", width=1)),
-            selected=dict(marker=dict(size=25, color=SELECT_COLOR)),
             customdata=metadata_list,  # Store node_text in customdata
             hoverinfo="none",
             hovertemplate=HOVERTEMPLATE,
@@ -236,12 +235,13 @@ def create_figure(G, global_positions, clusters):
         # plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
         # paper_bgcolor="#F0F2F6",  # Ensures smooth blending
         legend=dict(orientation="h", yanchor="bottom", y=-0.4, xanchor="left", x=0.0),
+        uirevision = True
     )
 
     return fig, cluster_edges_indices, cluster_node_indices, index_ranges
 
 
-def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom):
+def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom, selection_state):
     if timeline:
         fig.update_xaxes(title_text="Century")
         fig.update_layout(xaxis=dict(showgrid=True, zeroline=True, visible=True))
@@ -302,7 +302,6 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 showlegend=True,
                 legendgroup=selected_cluster,
                 marker=dict(size=20, color=highlight_color, line=dict(color="black", width=1)),
-                selected=dict(marker=dict(size=25, color=SELECT_COLOR)),
                 customdata=nodes_customdata,  # Store node_text in customdata
                 # hoverinfo='none',
                 hovertemplate=HOVERTEMPLATE,
@@ -312,6 +311,32 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 name=selected_cluster,
             )
         )
+    if clicked:
+        selected_x = []
+        selected_y = []
+        selected_customdata = [ ]
+        for selection_data in selection_state:
+            selected_x.append(selection_data["x"])
+            selected_y.append(selection_data["y"])
+            selected_customdata.append(selection_data["customdata"])
+        
+        fig.add_trace(
+            go.Scatter(
+                x=selected_x,
+                y=selected_y,
+                mode="markers",
+                visible=True,
+                showlegend=False,
+                marker=dict(size=24, color=SELECT_COLOR, line=dict(color="black", width=1)),
+                customdata=selected_customdata,  # Store node_text in customdata
+                hovertemplate=HOVERTEMPLATE,
+                hoverlabel=dict(
+                    bordercolor=highlight_color  # Border color
+                )
+            )
+        )
+
+        
 
     zoom_info = None
     if timeline:
@@ -323,11 +348,11 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
     elif clicked and previous_zoom:
         fig.update_layout(xaxis_range=previous_zoom["xaxis_range"], yaxis_range=previous_zoom["yaxis_range"])
     elif not clicked or not previous_zoom:
-        x_margin = (max_x - min_x) * 0.05
+        x_margin = (max_x - min_x) * 0.1
         x_min = max([min_x - x_margin, min(fig.data[1].x) - x_margin])
         x_max = min([max_x + x_margin, max(fig.data[1].x) + x_margin])
 
-        y_margin = (max_x - min_x) * 0.05
+        y_margin = (max_x - min_x) * 0.1
         y_min = max([min_y - y_margin, min(fig.data[1].y) - y_margin])
         y_max = min([max_y + y_margin, max(fig.data[1].y) + y_margin])
 

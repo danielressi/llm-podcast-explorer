@@ -166,7 +166,7 @@ class RSSFeedAnalyzer:
         for i, episode in enumerate(episode_loader):
             if i > limit:
                 break
-            elif (i % batch_size == 0 and i > 0) or i == limit:
+            elif (i % batch_size == 0 and i > 0) or (i == limit):
                 self.logger.info(f"Running batch {i // batch_size}")
                 response = chain.batch(batch_content)
 
@@ -176,8 +176,16 @@ class RSSFeedAnalyzer:
                 batch_metadata = []
                 batch_content = []
             else:
-                batch_content.append({"title": episode.title, "episode_content": episode.description[:1500]})
-                batch_metadata.append(episode.model_dump(exclude="description"))
+                if len(episode.description) > 0:
+                    batch_content.append({"title": episode.title, "episode_content": episode.description[:1500]})
+                    batch_metadata.append(episode.model_dump(exclude="description"))
+
+        if len(batch_content) > 0:
+                response = chain.batch(batch_content)
+
+                analysed_episodes = [Episode(metadata=m, insights=r) for m, r in zip(batch_metadata, response)]
+
+                analysis_results.extend(analysed_episodes)
 
         return AnalyzedEpisodes(episodes=analysis_results)
 
@@ -226,7 +234,7 @@ class RSSFeedAnalyzer:
 
     def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True):
         vectors = np.array(self.embeddings.embed_documents(text_catalog))
-        distances = pairwise_distances(vectors, metric="cosine")
+        distances =pairwise_distances(vectors, metric="cosine")
         embedding_2d = self._run_umap(vectors)
         clusters_df = (
             pd.DataFrame({"text_catalog": text_catalog}, index=range(len(text_catalog)))
@@ -462,7 +470,7 @@ class RSSFeedAnalyzer:
         consolidated_episodes = []
         for e in analysed_episodes.episodes:
             ep_copy = Episode(**e.model_dump())
-            clusters = [c for c in clusters_df.loc[e.metadata.index, "clusters_fuzzy"]]
+            clusters = [c for c in clusters_df.loc[e.metadata.index, "clusters_fuzzy"] if c in clusters_unique_df]
             cluster_titles = [clusters_unique_df.loc[c] for c in clusters]
             ep_clusters_df = pd.DataFrame({
                 "clusters": clusters,
