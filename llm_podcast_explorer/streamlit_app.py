@@ -86,17 +86,17 @@ def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> s
     markdown = []
     for key, value in display_data.items():
         # Add header for the key
-        if len(value) > 0:
-            markdown.append(f"#### {key}  \n")  # Two spaces at end for line break
+        
+        markdown.append(f"#### {key}  \n")  # Two spaces at end for line break
 
-            # Handle list values
-            if isinstance(value, list):
-                markdown.extend([f"- {item}" for item in value])
-            # Handle string values
-            else:
-                markdown.append(f"{value}")
+        # Handle list values
+        if isinstance(value, list):
+            markdown.extend([f"- {item}" for item in value])
+        # Handle string values
+        else:
+            markdown.append(f"{value}")
 
-            markdown.append("\n")  # Add spacing between sections
+        markdown.append("\n")  # Add spacing between sections
 
     return "\n".join(markdown)
 
