@@ -167,10 +167,33 @@ def _init_sesion_state():
         st.session_state.major_categories = None
 
 
+def set_title_on_top(title):
+    st.markdown("""
+        <style>
+               /* Remove blank space at top and bottom */ 
+               .block-container {
+                   padding-top: 2rem;
+                   padding-bottom: 0rem;
+                }
+
+        </style>
+        """, unsafe_allow_html=True)
+    
+    st.markdown(
+        f"""
+        <h1 style="text-align: left; margin-top: 0;">
+            {title}
+        </h1>
+        """,
+        unsafe_allow_html=True
+    )
+
 def main(analyis_mode):
-    title = "Podcasts Explored"
+    title = "Podcast Threads"
     st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
-    st.title(f"{title}", anchor="explore")
+    set_title_on_top(title)
+    #st.markdown(f'<h1 id="{title}">{title}</h1>', unsafe_allow_html=True)
+    #st.title(f"{title}", anchor="explore")
 
     _init_sesion_state()
     podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
@@ -218,10 +241,17 @@ def main(analyis_mode):
             analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
 
     with st.sidebar:
-        reset = st.button("Rerun analysis", disabled=reset_disabled)
-        if reset and st.session_state.selected_podcast is not None:
-            st.session_state.checkpoint = False
-            load_data.clear()
+        col1, col2 = st.columns([1,1])
+        with col1:
+            reset = st.button("Rerun analysis", disabled=reset_disabled)
+            if reset and st.session_state.selected_podcast is not None:
+                st.session_state.checkpoint = False
+                load_data.clear()
+        with col2:
+            reset_view = st.button("Reset view", disabled=False)
+            if not st.session_state.click_reset:
+                st.session_state.click_reset = reset_view
+
     
     select_box_placeholder = st.empty()
     placeholder = st.empty()
@@ -314,7 +344,7 @@ def main(analyis_mode):
                 key="plotly_state",
                 selection_mode=("points",),
                 on_select=on_select,
-                config=dict(scrollZoom=False, doubleClick="reset+autosize", doubleClickDelay=1000),
+                config=dict(scrollZoom=True, doubleClick="reset+autosize", doubleClickDelay=1000),
             )
 
         if analyis_mode == "static":
