@@ -365,8 +365,8 @@ def main(analyis_mode):
                     st.write(
                     """
                     **Tips:**
-
-                    - Select a category to start unravelling the themes and topics of the podcast
+                    - Select a category to start exploring the themes and topics of the podcast
+                    - Each point represents an episode and similar episodes are visualised closer to each other.
                     - Click on a point to show episode details.
                     """
                     )
