@@ -189,7 +189,7 @@ def set_title_on_top(title):
     )
 
 def main(analyis_mode):
-    title = "Podcast Threads"
+    title = "Podcasts | Explored"
     st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
     set_title_on_top(title)
     #st.markdown(f'<h1 id="{title}">{title}</h1>', unsafe_allow_html=True)
