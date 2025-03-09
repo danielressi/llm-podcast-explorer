@@ -14,6 +14,12 @@ ALL_KEY = "All"
 EPISODE_LIMIT = 700
 DEFAULT_MODE = "active"
 
+PODCAST_QUERY_LOOKUP = {"GAG": "Geschichten aus der Geschichte",
+                        "99pi": "99% Invisible",
+                        "Verbrechen": "Verbrechen",
+                        "Atlas-Obscura": "The Atlas Obscura Podcast"
+                        }
+
 
 @st.cache_data(show_spinner=False)
 def load_static_data(checkpoint_path):
@@ -133,9 +139,9 @@ def on_select():
 def _init_sesion_state():
     if "timeline_mode" not in st.session_state:
         st.session_state.timeline_mode = False
-    if "timeline_toggle_disabled" not in st.session_state:
-        st.session_state.timeline_toggle_disabled = False
     # Initialize session state variables
+    if "podcast_query" not in st.session_state:
+        st.session_state.podcast_query = False
     if "selected_podcast" not in st.session_state:
         st.session_state.selected_podcast = None
     if "checkpoint" not in st.session_state:
@@ -161,15 +167,49 @@ def _init_sesion_state():
         st.session_state.major_categories = None
 
 
+def set_title_on_top(title):
+    st.markdown("""
+        <style>
+               /* Remove blank space at top and bottom */ 
+               .block-container {
+                   padding-top: 2rem;
+                   padding-bottom: 0rem;
+                }
+
+        </style>
+        """, unsafe_allow_html=True)
+    
+    st.markdown(
+        f"""
+        <h1 style="text-align: left; margin-top: 0;">
+            {title}
+        </h1>
+        """,
+        unsafe_allow_html=True
+    )
+
 def main(analyis_mode):
-    title = "Podcasts Explored"
+    title = "Podcast Threads"
     st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
-    st.title(f"{title}")
+    set_title_on_top(title)
+    #st.markdown(f'<h1 id="{title}">{title}</h1>', unsafe_allow_html=True)
+    #st.title(f"{title}", anchor="explore")
 
     _init_sesion_state()
+    podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
+    podcast_query = st.query_params.get("podcast", None)
+    if podcast_query is not None:
+        if podcast_query in PODCAST_QUERY_LOOKUP:
+            st.session_state.selected_podcast = PODCAST_QUERY_LOOKUP[podcast_query]
+            st.session_state.podcast_query = True
+        elif podcast_query.replace("-", " ") in podcasts:
+            st.session_state.podcast_query = True
+            st.session_state.selected_podcast = podcast_query.replace("-", " ")
+
+        
 
 
-    if analyis_mode == "active":
+    if analyis_mode == "active" and st.session_state.selected_podcast is None:
         reset_disabled = False
         rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
         # Update session state when RSS URL is provided
@@ -184,9 +224,16 @@ def main(analyis_mode):
                 st.error(e)
                 st.session_state.selected_podcast = None
     else:
-        podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
+        
         reset_disabled = True
-        selected_podcast = st.selectbox("Choose a podcast:", options=sorted(podcasts.keys()), index=None)
+        podcast_options = sorted(podcasts.keys())
+        if st.session_state.podcast_query:
+            index = podcast_options.index(st.session_state.selected_podcast)
+        else:
+            index = None
+        selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=index)
+        
+        
         st.session_state.selected_podcast = selected_podcast
 
         # st.session_state.rss_url
@@ -194,11 +241,19 @@ def main(analyis_mode):
             analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
 
     with st.sidebar:
-        reset = st.button("Rerun analysis", disabled=reset_disabled)
-        if reset and st.session_state.selected_podcast is not None:
-            st.session_state.checkpoint = False
-            load_data.clear()
+        col1, col2 = st.columns([1,1])
+        with col1:
+            reset = st.button("Rerun analysis", disabled=reset_disabled)
+            if reset and st.session_state.selected_podcast is not None:
+                st.session_state.checkpoint = False
+                load_data.clear()
+        with col2:
+            reset_view = st.button("Reset view", disabled=False)
+            if not st.session_state.click_reset:
+                st.session_state.click_reset = reset_view
+
     
+    select_box_placeholder = st.empty()
     placeholder = st.empty()
 
     if st.session_state.selected_podcast is None:
@@ -229,10 +284,8 @@ def main(analyis_mode):
     else:
         with st.sidebar:
             timeline = st.toggle(
-                "Timline mode", value=st.session_state.timeline_mode, disabled=st.session_state.timeline_toggle_disabled
+                "Timline mode", value=st.session_state.timeline_mode, disabled=False
             )
-
-        st.session_state.timeline_toggle_disabled = False
 
         base_fig, cluster_data = create_network_graph(analysed_episodes, timeline)
 
@@ -240,10 +293,10 @@ def main(analyis_mode):
             major_categories = analysed_episodes["category_2_clusters"]
             st.session_state.major_categories = major_categories
             category_options = [ALL_KEY] + list(sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)) #list(major_categories.keys())
-
-            selected_category = st.sidebar.selectbox(
-                "Select a category:", options=category_options, key="category_selection", index=0
-            )
+            with select_box_placeholder.container():
+                selected_category = st.selectbox(
+                    "Select a category:", options=category_options, key="category_selection", index=0
+                )
 
             if st.session_state.click_reset:
                 st.session_state.selected_category = ALL_KEY
@@ -291,7 +344,7 @@ def main(analyis_mode):
                 key="plotly_state",
                 selection_mode=("points",),
                 on_select=on_select,
-                config=dict(scrollZoom=False, doubleClick="reset+autosize", doubleClickDelay=1000),
+                config=dict(scrollZoom=True, doubleClick="reset+autosize", doubleClickDelay=1000),
             )
 
         if analyis_mode == "static":
