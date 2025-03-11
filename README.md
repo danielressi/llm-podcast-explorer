@@ -11,13 +11,13 @@ Podcasts are full of ideas, connections, and themes—but they’re not always e
 🚀 Find the best episodes – Get straight to the topics that matter to you.
 
 
-[🎧 Start Unraveling Now!](https://podcasts-unraveled.streamlit.app/)
+[🎧 Start Unraveling Now!](https://podcasts-explored.streamlit.app/)
 
 ## How to explore:
 
 This application uses AI (OpenAI Embeddings and gpt-4o-mini) to analyse the rss feed. To avoid costs open podcast search is disabled at the moment.
 
-* Selected podcasts are available on [https://podcasts-unraveled.streamlit.app/](https://podcasts-unraveled.streamlit.app/)
+* Selected podcasts are available on [https://podcasts-unraveled.streamlit.app/](https://podcasts-explored.streamlit.app/)
 * Run the application yourself for full flexibility: [Project Setup Guide](#project_setup_guide)
     * **Attention:** OpenAI API Key is needed
 * You can also create an issue to request additional podcasts on the website
