@@ -50,10 +50,9 @@ def load_data(url, checkpoint):
         progress_bar.progress(90, "No data found ..")
         progress_bar.empty()
 
-
 @st.cache_data(show_spinner=False)
 def create_network_graph(analysed_episodes, timeline):
-    G, global_positions, clusters = build_networkx_graph(analysed_episodes, timeline)
+    G, global_positions, clusters, episode_lookup = build_networkx_graph(analysed_episodes, timeline)
     fig, cluster_edge_indices, cluster_node_indices, ranges = create_figure(G, global_positions, clusters)
     cluster_data = {
         "clusters": clusters,
@@ -62,8 +61,7 @@ def create_network_graph(analysed_episodes, timeline):
         "node_index_range": ranges["nodes"],
         "edge_index_range": ranges["edges"],
     }
-
-    return fig, cluster_data
+    return fig, cluster_data, episode_lookup
 
 
 def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> str:
@@ -130,7 +128,6 @@ def on_select():
             else:
                 st.session_state.selected_category = ALL_KEY
                 st.session_state.filtered_clusters = list(selection["selection"]["points"][0]["customdata"][3].values())
-            st.session_state.selection_data = selection["selection"]["points"][0]["customdata"][-1]
 
         else:
             st.session_state.click_selection = False
@@ -154,9 +151,6 @@ def _init_sesion_state():
         st.session_state.selected_cluster = None
     if "selection_state" not in st.session_state:
         st.session_state.selection_state = None
-
-    if "selection_data" not in st.session_state:
-        st.session_state.selection_data = None
     if "click_selection" not in st.session_state:
         st.session_state.click_selection = False
     if "click_reset" not in st.session_state:
@@ -165,6 +159,10 @@ def _init_sesion_state():
         st.session_state.zoom_state = None
     if "major_categories" not in st.session_state:
         st.session_state.major_categories = None
+    if "searched_episode" not in st.session_state:
+        st.session_state.searched_episode = None
+
+
 
 
 def set_title_on_top(title):
@@ -182,19 +180,34 @@ def set_title_on_top(title):
     st.markdown(
         f"""
         <h1 style="text-align: left; margin-top: 0;">
-            {title}
+            {title} <span style="font-size: 14px;font-weight: normal">by</span> <span style="font-size: 14px;">FeedPam</span>
         </h1>
         """,
         unsafe_allow_html=True
     )
 
+def reset_search():
+    st.session_state.searched_episode = None
+    st.session_state.selection_state = None
+    st.session_state.episode_selection = None
+
+def reset_category_selection():
+    st.session_state.category_selection = ALL_KEY
+    st.session_state.selection_state = None
+
+
+def click_reset():
+    """ User clicked on reset view or double clicked graph"""
+    st.session_state.selected_category = ALL_KEY
+    st.session_state.click_reset = False
+    st.session_state.searched_episode = None
+
 def main(analyis_mode):
     title = "Podcasts | Explored"
-    st.set_page_config(page_title=title, layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
     set_title_on_top(title)
     #st.markdown(f'<h1 id="{title}">{title}</h1>', unsafe_allow_html=True)
     #st.title(f"{title}", anchor="explore")
-
     _init_sesion_state()
     podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
     podcast_query = st.query_params.get("podcast", None)
@@ -209,7 +222,7 @@ def main(analyis_mode):
         
 
 
-    if analyis_mode == "active" and st.session_state.selected_podcast is None:
+    if analyis_mode == "active" and not st.session_state.podcast_query:
         reset_disabled = False
         rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
         # Update session state when RSS URL is provided
@@ -261,9 +274,6 @@ def main(analyis_mode):
             st.markdown("")
             st.markdown("")
             st.markdown("")
-            st.markdown("")
-            st.markdown("")
-            st.markdown("")
             st.markdown(
                 f""" 
             #### Explore the Big Picture Behind Every Podcast
@@ -287,30 +297,51 @@ def main(analyis_mode):
                 "Timline mode", value=st.session_state.timeline_mode, disabled=False
             )
 
-        base_fig, cluster_data = create_network_graph(analysed_episodes, timeline)
+        base_fig, cluster_data, episode_lookup = create_network_graph(analysed_episodes, timeline)
 
         try:
+            
             major_categories = analysed_episodes["category_2_clusters"]
             st.session_state.major_categories = major_categories
             category_options = [ALL_KEY] + list(sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)) #list(major_categories.keys())
             with select_box_placeholder.container():
                 selected_category = st.selectbox(
-                    "Select a category:", options=category_options, key="category_selection", index=0
+                    "Select a category:", 
+                    options=category_options, 
+                    key="category_selection", 
+                    index=0,
+                    on_change=reset_search
                 )
 
+            with st.sidebar:
+                search_episode = st.selectbox(
+                    "Search episodes", 
+                    options=episode_lookup.keys(), 
+                    key="episode_selection", 
+                    on_change=reset_category_selection,
+                    index=None,
+                    placeholder="Search"
+                )
+            
+            
+
+            # Reset on double click
             if st.session_state.click_reset:
-                st.session_state.selected_category = ALL_KEY
-                st.session_state.click_reset = False
-            elif st.session_state.click_selection:
-                # st.session_state.selected_cluster already set on_select call
-                # st.session_state.click_selection = False
-                pass
+                click_reset()
+
             else:
                 st.session_state.selected_category = selected_category
+                st.session_state.searched_episode = search_episode
 
-            if st.session_state.click_selection:
-                # filtered_clusters already set on_select call
-                pass
+            if st.session_state.searched_episode  is not None:
+                ep_data = episode_lookup[st.session_state.searched_episode]
+                st.session_state.filtered_clusters = {
+                    c: True if c in ep_data["clusters"] else "legendonly" for c in major_categories[ep_data["category"][0]]
+                }
+                st.session_state.selection_state = [ep_data]
+                st.session_state.selected_category = ep_data["category"]
+                st.session_state.click_selection = True
+            # filtered_clusters already set on_select call
             elif st.session_state.selected_category == ALL_KEY:
                 st.session_state.filtered_clusters = {}
             else:
@@ -356,9 +387,10 @@ def main(analyis_mode):
             info_placeholder = st.empty()
             st.session_state.click_reset = False
             with info_placeholder.container():
-                if st.session_state.click_selection and st.session_state.selection_data:
-                    display_data = st.session_state.selection_data
+                if st.session_state.click_selection and st.session_state.selection_state:
+                    display_data = st.session_state.selection_state[0]["customdata"][-1]
                     st.write(format_dict_to_markdown(display_data))
+
                     st.session_state.click_selection = False
 
                 elif st.session_state.selected_cluster in [None, ALL_KEY]:

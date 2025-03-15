@@ -62,13 +62,11 @@ class RSSFeedAnalyzer:
         llm_api_key=None,
         logger=None,
         embedding_model="text-embedding-3-small",
-        cluster_themes=False,
-    ):
+        ):
         self.rss_loader = RSSFeedLoader(rss_url)
         set_llm_cache(SQLiteCache(database_path=".langchain.db"))
         self.llm = ChatOpenAI(model=model, api_key=llm_api_key, temperature=0.2)
         self.embeddings = self._init_embeddings(embedding_model)
-        self.cluster_themes = cluster_themes
         self._noise_title = "Sonstiges" if self.language == "de" else "Other"
 
         if logger is None:
@@ -189,23 +187,15 @@ class RSSFeedAnalyzer:
 
         return AnalyzedEpisodes(episodes=analysis_results)
 
-    def _create_text_catalog(self, analysed_episodes, keys=["inferred_themes"]):
-        text_catalog = {}
-        for e in analysed_episodes:
-            text_catalog[e.metadata.index] = []
-            for k in keys:
-                text_catalog[e.metadata.index].extend(getattr(e.insights, k))
-            text_catalog[e.metadata.index] = ",".join(text_catalog[e.metadata.index])
-        return text_catalog
-
     def _create_episode_text_catalog(self, analysed_episodes):
         text_catalog = {}
         for ep in analysed_episodes:
             ep_themes = ",".join(ep.insights.inferred_themes)
             ep_tags = ",".join(ep.insights.tags)
             text_catalog[ep.metadata.index] = (
-                f"Themes:{ep_themes}\nSummary:{ep.insights.summary}\n"
-                # f"Tags:{ep_tags}\n"
+                f"Themes:{ep_themes}\n"
+                f"Summary:{ep.insights.summary}\n"
+                f"Tags:{ep_tags}\n"
             )
 
         return text_catalog
@@ -403,7 +393,6 @@ class RSSFeedAnalyzer:
         consolidated_episodes = []
         for e in analysed_episodes.episodes:
             insights = EpisodeInsights(**e.insights.model_dump())
-            # list compatibility with self.cluster_themes mode
             clusters = [
                 c for c in clusters_df.loc[e.metadata.index, "clusters_fuzzy"] if c in clusters_unique_df
             ]  # if c != -1
@@ -520,7 +509,7 @@ class RSSFeedAnalyzer:
 
         major_categories = chain.invoke(cluster_titles_doc)
 
-        clusters_df["major_category"] = None
+        clusters_df["major_category"] = self._noise_title
         for m_category, titles in major_categories.mapping.items():
             lost_titles = set(titles).difference(set(clusters_df["consolidated_title"].unique()))
             if len(lost_titles) > 0:
@@ -554,20 +543,9 @@ class RSSFeedAnalyzer:
             consolidated_episodes.append(ep_copy)
         return AnalyzedEpisodes(episodes=consolidated_episodes, category_2_clusters=category_2_clusters), clusters_df
 
-    # def run(self, limit=1000):
-    #     raise NotImplementedError("todos from run with streamlit")
-    #     analysed_episodes = self.analyze_feed(limit)
+    def run(self, limit=1000):
+        raise NotImplementedError("todo: adapt run without streamlit")
 
-    #     if self.cluster_themes:
-    #         text_catalog = self._create_text_catalog(analysed_episodes, keys=["inferred_themes"])
-    #         theme_clusters = self._cluster_text_catalog(text_catalog)
-    #         consolidated_episodes = self._consolidate_themes(analysed_episodes, theme_clusters)
-    #     else:
-    #         text_catalog = {ep.metadata.index: ep.insights.summary for ep in analysed_episodes.episodes}
-    #         summary_clusters = self._cluster_text_catalog(text_catalog)
-    #         consolidated_episodes = self._consolidate_summaries(analysed_episodes, summary_clusters)
-
-    #     return consolidated_episodes
 
     def run_with_streamlit_progress(self, progress_bar, limit=1000):
         """
@@ -578,32 +556,25 @@ class RSSFeedAnalyzer:
         )
         analysed_episodes = self.analyze_feed(limit)
 
-        if self.cluster_themes:
-            keys = ["inferred_themes"]
-            progress_bar.progress(50, f"Clustering {','.join(keys)}...")
-            text_catalog = self._create_text_catalog(analysed_episodes.episodes, keys=keys)
-            theme_clusters = self._cluster_text_catalog(text_catalog)
-            progress_bar.progress(70, "Consolidating clusters ...")
-            consolidated_episodes = self._consolidate_themes(analysed_episodes, theme_clusters)
-        else:
-            progress_bar.progress(50, "Clustering episode summaries ...")
-            text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
-            summary_clusters, distance_map = self._cluster_text_catalog(text_catalog)
-            progress_bar.progress(70, f"Creating cluster titles with {self.llm.model_name}...")
-            clustered_episodes, titled_clusters = self._generate_cluster_titles(analysed_episodes, summary_clusters)
-            progress_bar.progress(80, f"Consolidating clusters with {self.llm.model_name}...")
-            consolidated_episodes, consolidated_clusters = self._consolidate_clusters(
-                clustered_episodes, titled_clusters
-            )
-            progress_bar.progress(90, f"Generating major categories with {self.llm.model_name}...")
-            finalized_episodes, final_clusters = self._get_major_categories(
-                consolidated_episodes, consolidated_clusters
-            )
-            finalized_episodes.distance_map = distance_map
-            finalized_episodes.extra["consolidation_map"] = (
-                final_clusters.groupby("consolidated_title")["title"].apply(lambda x: list(set(x))).to_dict()
-            )
-            # cluster_id_lookup = final_clusters.groupby("cluster")["consolidated_title"].first()
+
+        progress_bar.progress(50, "Clustering episode summaries ...")
+        text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
+        summary_clusters, distance_map = self._cluster_text_catalog(text_catalog)
+        progress_bar.progress(70, f"Creating cluster titles with {self.llm.model_name}...")
+        clustered_episodes, titled_clusters = self._generate_cluster_titles(analysed_episodes, summary_clusters)
+        progress_bar.progress(80, f"Consolidating clusters with {self.llm.model_name}...")
+        consolidated_episodes, consolidated_clusters = self._consolidate_clusters(
+            clustered_episodes, titled_clusters
+        )
+        progress_bar.progress(90, f"Generating major categories with {self.llm.model_name}...")
+        finalized_episodes, final_clusters = self._get_major_categories(
+            consolidated_episodes, consolidated_clusters
+        )
+        finalized_episodes.distance_map = distance_map
+        finalized_episodes.extra["consolidation_map"] = (
+            final_clusters.groupby("consolidated_title")["title"].apply(lambda x: list(set(x))).to_dict()
+        )
+        # cluster_id_lookup = final_clusters.groupby("cluster")["consolidated_title"].first()
         self.logger.info("analysis completed")
         progress_bar.progress(95, "Preparing plot ...")
 

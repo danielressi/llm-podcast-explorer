@@ -37,6 +37,15 @@ HOVERTEMPLATE = (
     "<extra></extra>"
 )
 
+def extract_episode_selection_data(G, positions, episode):
+    data = G.nodes[episode]
+    x,y = positions[episode]
+    return dict(x=x, y=y, clusters=data["cluster"], customdata=extract_customdata(data),category=data["category"])
+
+def build_episode_lookup(G, global_positions, episodes):
+    return {ep["metadata"]["title"]: extract_episode_selection_data(G, global_positions, ep["insights"]["episode_id"]) for ep in episodes["episodes"]}
+
+
 
 def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
     # -------------------------------
@@ -145,7 +154,20 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
     else:
         global_positions = embedding_positions
 
-    return G, global_positions, relevant_clusters
+
+    episode_lookup = build_episode_lookup(G, global_positions, episodes)
+    return G, global_positions, relevant_clusters, episode_lookup
+
+def extract_customdata(node):
+    return [
+            node["title"],
+            ", ".join(node["on_click"]["themes"]),
+            node["century"],
+            node["cluster"],
+            list(set(node["category"])),
+            node["on_click"]["summary"],
+            node["on_click"],
+        ]
 
 
 def create_figure(G, global_positions, clusters):
@@ -155,10 +177,12 @@ def create_figure(G, global_positions, clusters):
     edge_x = []
     edge_y = []
     offset = 0
+    #widths = []
     for i, (u, v) in enumerate(G.edges()):
         # get the positions
         x0, y0 = global_positions[u]
         x1, y1 = global_positions[v]
+        #widths.append(G.get_edge_data(u,v)["weight"])
         edge_x.extend([x0, x1])
         edge_y.extend([y0, y1])
         shared_clusters = set(G.nodes[u]["cluster"]).intersection(set(G.nodes[v]["cluster"]))
@@ -195,15 +219,7 @@ def create_figure(G, global_positions, clusters):
         x, y = global_positions[node_name]
         nodes_x.append(x)
         nodes_y.append(y)
-        metadata_list.append([
-            node["title"],
-            ", ".join(node["on_click"]["themes"]),
-            node["century"],
-            node["cluster"],
-            list(set(node["category"])),
-            node["on_click"]["summary"],
-            node["on_click"],
-        ])
+        metadata_list.append(extract_customdata(node))
 
         for c in node["cluster"]:
             # not all clusters passed on to selector
