@@ -177,10 +177,12 @@ def create_figure(G, global_positions, clusters):
     edge_x = []
     edge_y = []
     offset = 0
+    #widths = []
     for i, (u, v) in enumerate(G.edges()):
         # get the positions
         x0, y0 = global_positions[u]
         x1, y1 = global_positions[v]
+        #widths.append(G.get_edge_data(u,v)["weight"])
         edge_x.extend([x0, x1])
         edge_y.extend([y0, y1])
         shared_clusters = set(G.nodes[u]["cluster"]).intersection(set(G.nodes[v]["cluster"]))
