@@ -14,6 +14,7 @@ ALL_KEY = "All"
 EPISODE_LIMIT = 700
 DEFAULT_MODE = "active"
 
+
 PODCAST_QUERY_LOOKUP = {"GAG": "Geschichten aus der Geschichte",
                         "99pi": "99% Invisible",
                         "Verbrechen": "Verbrechen",
@@ -53,13 +54,11 @@ def load_data(url, checkpoint):
 @st.cache_data(show_spinner=False)
 def create_network_graph(analysed_episodes, timeline):
     G, global_positions, clusters, episode_lookup = build_networkx_graph(analysed_episodes, timeline)
-    fig, cluster_edge_indices, cluster_node_indices, ranges = create_figure(G, global_positions, clusters)
+    fig, cluster_edge_indices, cluster_node_indices = create_figure(G, global_positions, clusters)
     cluster_data = {
         "clusters": clusters,
         "cluster_edge_indices": cluster_edge_indices,
         "cluster_node_indices": cluster_node_indices,
-        "node_index_range": ranges["nodes"],
-        "edge_index_range": ranges["edges"],
     }
     return fig, cluster_data, episode_lookup
 
@@ -180,7 +179,7 @@ def set_title_on_top(title):
     st.markdown(
         f"""
         <h1 style="text-align: left; margin-top: 0;">
-            {title} <span style="font-size: 14px;font-weight: normal">by</span> <span style="font-size: 14px;">FeedPam</span>
+            {title} <span style="font-size: 14px;font-weight: normal">by</span> <span style="font-size: 14px;">FeedPAM</span>
         </h1>
         """,
         unsafe_allow_html=True
@@ -194,6 +193,7 @@ def reset_search():
 def reset_category_selection():
     st.session_state.category_selection = ALL_KEY
     st.session_state.selection_state = None
+    st.session_state.zoom_state = None
 
 
 def click_reset():
@@ -278,7 +278,7 @@ def main(analyis_mode):
                 f""" 
             #### Explore the Big Picture Behind Every Podcast
 
-            Podcasts are full of ideas, connections, and themes—but they’re not always easy to navigate. {title} helps you break down, explore, and visualize the hidden patterns inside your favorite shows.
+            Podcasts are full of ideas, connections, and themes — but they’re not always easy to navigate. **FeedPAM** helps you break down, explore, and visualize the hidden patterns inside your favorite shows.
 
             ✨ Discover the core themes – See what a podcast is really about.
 
@@ -375,7 +375,16 @@ def main(analyis_mode):
                 key="plotly_state",
                 selection_mode=("points",),
                 on_select=on_select,
-                config=dict(scrollZoom=True, doubleClick="reset+autosize", doubleClickDelay=1000),
+                config=dict(scrollZoom=True, 
+                            doubleClick="reset+autosize", 
+                            doubleClickDelay=1000,
+                            toImageButtonOptions={
+                                'format': 'png', # one of png, svg, jpeg, webp
+                                'filename': 'network_view',
+                                'height': 500,
+                                'width': 700,
+                                'scale':6 # Multiply title/legend/axis/canvas sizes by this factor
+                            }),
             )
 
         if analyis_mode == "static":

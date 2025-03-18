@@ -26,6 +26,7 @@ COLOR_CYCLE = [
     f"rgba(188, 189, 34, {COLOR_OPACITY})",  # Yellow-green
     f"rgba(23, 190, 207, {COLOR_OPACITY})",  # Cyan
 ]
+HOVER_ENABLED = True
 
 HOVERTEMPLATE = (
     "<b>%{customdata[0]}</b><br>"
@@ -36,6 +37,10 @@ HOVERTEMPLATE = (
     "<i>Century: %{customdata[2]}</i><br>"
     "<extra></extra>"
 )
+
+HOVER_MINIMAL = ("<b>%{customdata[0]}</b><br>"
+                  "<extra></extra>"
+                 )
 
 def extract_episode_selection_data(G, positions, episode):
     data = G.nodes[episode]
@@ -208,9 +213,6 @@ def create_figure(G, global_positions, clusters):
     )
 
     index_offset = 0  # len(G.edges())
-    edge_range = (0, index_offset - 1)
-    node_range = (index_offset, index_offset + len(G.nodes()))
-    index_ranges = dict(edges=edge_range, nodes=node_range)
     nodes_x = []
     nodes_y = []
     metadata_list = []
@@ -237,7 +239,7 @@ def create_figure(G, global_positions, clusters):
             marker=dict(size=12, color=DEFAULT_NODE_COLOR, line=dict(color="black", width=1)),
             customdata=metadata_list,  # Store node_text in customdata
             hoverinfo="none",
-            hovertemplate=HOVERTEMPLATE,
+            hovertemplate=HOVERTEMPLATE if HOVER_ENABLED else None,
             name="Nodes",
         )
     )
@@ -250,17 +252,19 @@ def create_figure(G, global_positions, clusters):
         margin=dict(l=20, r=20, t=10, b=10),
         # plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
         # paper_bgcolor="#F0F2F6",  # Ensures smooth blending
-        legend=dict(orientation="h", yanchor="bottom", y=-0.4, xanchor="left", x=0.0),
-        uirevision = True
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="left", x=0.0),
+        uirevision = True,
+        uniformtext_minsize=36
     )
 
-    return fig, cluster_edges_indices, cluster_node_indices, index_ranges
+    return fig, cluster_edges_indices, cluster_node_indices
 
 
 def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom, selection_state):
     if timeline:
         fig.update_xaxes(title_text="Century")
-        fig.update_layout(xaxis=dict(showgrid=True, zeroline=True, visible=True))
+        fig.update_layout(xaxis=dict(showgrid=True, zeroline=True, visible=True),
+                          legend=dict(y=-0.5),)
 
     if selected_category == "All":
         return fig, None
@@ -319,11 +323,11 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 legendgroup=selected_cluster,
                 marker=dict(size=20, color=highlight_color, line=dict(color="black", width=1)),
                 customdata=nodes_customdata,  # Store node_text in customdata
-                # hoverinfo='none',
-                hovertemplate=HOVERTEMPLATE,
+                hoverinfo='none',
+                hovertemplate=HOVERTEMPLATE if HOVER_ENABLED else None,
                 hoverlabel=dict(
                     bordercolor=highlight_color  # Border color
-                ),
+                ) if HOVER_ENABLED else None,
                 name=selected_cluster,
             )
         )
@@ -340,9 +344,11 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
             go.Scatter(
                 x=selected_x,
                 y=selected_y,
-                mode="markers",
+                mode="markers" if HOVER_ENABLED else "markers+text",
                 visible=True,
+                textposition="top center",
                 showlegend=False,
+                text=None if HOVER_ENABLED else f"<b>{selected_customdata[0][0]}</b>",
                 marker=dict(size=24, color=SELECT_COLOR, line=dict(color="black", width=1)),
                 customdata=selected_customdata,  # Store node_text in customdata
                 hovertemplate=HOVERTEMPLATE,
@@ -363,6 +369,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
 
     elif clicked and previous_zoom:
         fig.update_layout(xaxis_range=previous_zoom["xaxis_range"], yaxis_range=previous_zoom["yaxis_range"])
+        
     elif not clicked or not previous_zoom:
         x_margin = (max_x - min_x) * 0.1
         x_min = max([min_x - x_margin, min(fig.data[1].x) - x_margin])
