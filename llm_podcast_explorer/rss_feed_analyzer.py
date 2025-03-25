@@ -84,15 +84,19 @@ class RSSFeedAnalyzer:
     def __init__(
         self,
         rss_url,
-        model="gpt-4o-mini",
         llm_api_key=None,
+        extraction_model="gpt-4o-mini",
+        embedding_model="text-embedding-3-small",
+        analysis_model=None,
+        tempature=0.2,
         logger=None,
-        embedding_model="text-embedding-3-small"
         ):
         self.rss_loader = RSSFeedLoader(rss_url)
         set_llm_cache(SQLiteCache(database_path=".langchain.db"))
-        self.llm = ChatOpenAI(model=model, api_key=llm_api_key, temperature=0.2)
-        self.llm
+        self.extraction_llm = ChatOpenAI(model=extraction_model, api_key=llm_api_key, temperature=tempature)
+        self.analysis_llm = ChatOpenAI(model=analysis_model if analysis_model is not None else extraction_model, 
+                                       api_key=llm_api_key,
+                                       temperature=tempature)
         self.embeddings = self._init_embeddings(embedding_model)
         self._noise_title = "Sonstiges" if self.language == "de" else "Other"
 
@@ -133,7 +137,7 @@ class RSSFeedAnalyzer:
             namespace=embeddings.model,  # Create a cache-backed embedder using the base embedding and storage
         )
 
-    def analyze_feed(self, limit=10000):
+    def analyze_feed(self, limit=10000, batch_size=56):
         episode_loader = self.rss_loader.lazy_load()
         self.logger.info(f"Analyzing {self.size} podcast episdoes")
         parser = PydanticOutputParser(pydantic_object=EpisodeInsights)
@@ -158,7 +162,6 @@ class RSSFeedAnalyzer:
             Constraints:
                 - The tags and themes must be in the same language as the input
                 - Output your answer as JSON that matches the given schema: {format_instructions}.
-             
             
             """,
             ),
@@ -171,8 +174,8 @@ class RSSFeedAnalyzer:
             podcast_description=self.rss_loader.description,
         )
 
-        request_chain = prompt_template | self.llm
-        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.llm, max_retries=2)
+        request_chain = prompt_template | self.extraction_llm
+        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.extraction_llm, max_retries=2)
 
         chain = RunnableParallel(
             completion=request_chain,
@@ -187,7 +190,7 @@ class RSSFeedAnalyzer:
         analysis_results = []
         batch_content = []
         batch_metadata = []
-        batch_size = 56
+        
         for i, episode in enumerate(episode_loader):
             if i > limit:
                 break
@@ -382,15 +385,15 @@ class RSSFeedAnalyzer:
             (
                 "system",
                 """
-                You are an expert title generator.
+                You are an expert title generator with a focus on the bigger picture.
                 Given a set of related documents with shared themes, generate an authentic, concise, and engaging title (max. 5 words) in {language}.
 
                 Follow these instructions strictly:
 
-                - Accurate: Precisely represent the core themes.
+                - Accurate: Precisely represent the core themes that are listed in the documents.
                 - Concise: Title must not exceed five words.
                 - Engaging: Match the appropriate tone (factual, humorous, dramatic, etc.) based on content.
-                - Generalized: Capture the broader, unifying idea or central theme shared across all documents.
+                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents.
                 - Natural: Ensure the title sounds authentic and human-like, never artificial.
 
                 Think step-by-step: Reflect on core themes → Determine appropriate tone → Generate concise and coherent title.
@@ -407,12 +410,11 @@ class RSSFeedAnalyzer:
             ("user", "Input: {data}"),
         ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
 
-        # chain = prompt_template | self.llm | parser
         self.logger.info("Consolidating episodes")
 
-        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.llm, max_retries=2)
+        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.analysis_llm, max_retries=2)
 
-        chain = RunnableParallel(completion=prompt_template | self.llm, prompt_value=prompt_template) | RunnableLambda(
+        chain = RunnableParallel(completion=prompt_template | self.analysis_llm, prompt_value=prompt_template) | RunnableLambda(
             lambda x: retry_parser.parse_with_prompt(completion=x["completion"].content, prompt_value=x["prompt_value"])
         )
 
@@ -462,18 +464,21 @@ class RSSFeedAnalyzer:
             (
                 "system",
                 """
-                You are an expert at analyzing and consolidating text.
-                You will receive a list of document titles. Identify groups of titles that are semantic duplicates or synonyms and consolidate them under a single generalized title.
+                You are an expert in text analysis and semantic consolidation.
 
-                Provide a mapping structured as follows:
-                    Key: A single generalized title that succinctly captures the core meaning shared by all duplicates.
-                    Values: A list of original redundant titles that are consolidated under this generalized title.
+                You will receive a list of document titles. Your task is to identify **only those titles that are exact or near-exact semantic duplicates** and consolidate them under a single, generalized title.
 
-                **Consolidation Guidelines:**
-                    - Precision & Conservatism: Only merge titles when you're completely confident they share identical or synonymous meaning. Avoid consolidation if there's even slight uncertainty.
-                    - Avoid Information Loss: Never merge titles if it risks losing valuable information or introduces inaccuracies. Therefore, it is unlikely that more than 3 titles will be consolidated under a single generalized title.
-                    - Generalization & Abstraction: Generate a generalized title that captures the common meaning or theme across duplicate titles. Do not simply select one of the existing titles; instead, create an abstracted, representative title.
-                
+                Provide the output as a mapping using the following structure:
+                    Key: A single, generalized title that succinctly captures the shared meaning of its associated titles.
+                    Values: A list of the original, redundant titles that were grouped under this generalized title.
+
+                **Consolidation Principles:**
+
+                - **Extreme Caution**: Only consolidate titles if their meanings are *clearly and unambiguously identical or synonymous*. If there is any ambiguity, variation in nuance, scope, or intent — do **not** group them.
+                - **Minimal Grouping**: Most titles will **not** have suitable matches. Only a very small number of highly similar titles should be grouped together. If you are not certain, leave the title out of the mapping.
+                - **No Information Loss**: Never merge titles if doing so risks omitting meaningful differences or specific details. Be especially careful with compound titles or those containing historical, cultural, or technical qualifiers.
+                - **Thoughtful Abstraction**: The generalized title should be *newly created* — a succinct abstraction of the grouped titles' core meaning. Avoid copying any single original title directly unless it is already appropriately general.
+
 
                 **Constraints (Hard rules):**
                 - The original language ({language}) must be maintained. 
@@ -485,7 +490,7 @@ class RSSFeedAnalyzer:
             ("user", "Input: {data}"),
         ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
 
-        chain = prompt_template | self.llm | parser
+        chain = prompt_template | self.analysis_llm | parser
         self.logger.info("Consolidating clusters")
 
         cluster_titles = (
@@ -537,8 +542,8 @@ class RSSFeedAnalyzer:
                     - Generalsation: Each group should reflect a broader category that accurately captures the essence of its titles. Categories should be general but relevant subtopics of the overall podcast theme.
                     - Relevance: Only group together titles that are meaningfully related. Each category should be distinct and coherent.
                     - Completeness: Every title must be included in a category. If some titles don’t fit into existing groups, create one or more "miscellaneous" categories that still reflect a common thread.
-                    - Conciseness: Keep the title concise ideally no longer than 5 words.
-                    - Reduction: One major category should contain around 2 to 6 titles and must not contain more than 8 titles.
+                    - Conciseness: Keep the category name concise ideally no longer than 5 words.
+                    - Reduction: One category should contain around 2 to 4 cluster titles and must not contain more than 6 titles.
                                  
                 Constraints (Hard rules): 
                  - The original language ({language}) must be maintained.
@@ -548,7 +553,7 @@ class RSSFeedAnalyzer:
             ("user", "Input: {data}"),
         ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
 
-        chain = prompt_template | self.llm | parser
+        chain = prompt_template | self.analysis_llm | parser
         self.logger.info("Consolidating episodes")
 
         cluster_titles = clusters_df["consolidated_title"].unique().tolist()
@@ -599,7 +604,7 @@ class RSSFeedAnalyzer:
         @progress_bar: st.progress widget
         """
         progress_bar.progress(
-            20, f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.llm.model_name}..."
+            20, f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.extraction_llm.model_name}..."
         )
         analysed_episodes = self.analyze_feed(limit)
 
@@ -607,14 +612,14 @@ class RSSFeedAnalyzer:
         progress_bar.progress(50, "Clustering episode summaries ...")
         text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
         summary_clusters, distance_map = self._cluster_text_catalog(text_catalog)
-        progress_bar.progress(70, f"Creating cluster titles with {self.llm.model_name}...")
+        progress_bar.progress(70, f"Creating cluster titles with {self.analysis_llm.model_name}...")
         clustered_episodes, titled_clusters = self._generate_cluster_titles(analysed_episodes, summary_clusters)
-        progress_bar.progress(80, f"Consolidating clusters with {self.llm.model_name}...")
+        progress_bar.progress(80, f"Consolidating clusters with {self.analysis_llm.model_name}...")
         consolidated_episodes, consolidated_clusters = self._consolidate_clusters(
             clustered_episodes, titled_clusters
         )
 
-        progress_bar.progress(90, f"Generating major categories with {self.llm.model_name}...")
+        progress_bar.progress(90, f"Generating major categories with {self.analysis_llm.model_name}...")
         finalized_episodes, final_clusters = self._get_major_categories(
             consolidated_episodes, consolidated_clusters
         )
@@ -622,7 +627,6 @@ class RSSFeedAnalyzer:
         finalized_episodes.extra["consolidation_map"] = (
             final_clusters.groupby("consolidated_title")["title"].apply(lambda x: list(set(x))).to_dict()
         )
-        # cluster_id_lookup = final_clusters.groupby("cluster")["consolidated_title"].first()
         self.logger.info("analysis completed")
         progress_bar.progress(95, "Preparing plot ...")
 

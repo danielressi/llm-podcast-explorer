@@ -33,8 +33,12 @@ def load_data(url, checkpoint):
     progress_bar = st.progress(0, "Loading data .. ")
     if url:
         llm_api_key = os.environ.get("OPENAI_API_KEY")
-
-        analyzer = RSSFeedAnalyzer(url, llm_api_key=llm_api_key)
+        extraction_model = os.environ.get("EXTRACTION_MODEL", "gpt-4o-mini")
+        analyis_model = os.environ.get("ANALYSIS_MODEL", None)
+        analyzer = RSSFeedAnalyzer(rss_url=url, 
+                                   llm_api_key=llm_api_key,
+                                   extraction_model=extraction_model,
+                                   analysis_model=analyis_model)
 
         checkpoint_path = CHECKPOINT_PATH / f"{analyzer.title}.json"
         if checkpoint and checkpoint_path.exists():
@@ -137,8 +141,6 @@ def _init_sesion_state():
         st.session_state.filtered_clusters = {}
     if "selected_category" not in st.session_state:
         st.session_state.selected_category = ALL_KEY
-    if "selected_cluster" not in st.session_state:
-        st.session_state.selected_cluster = None
     if "selection_state" not in st.session_state:
         st.session_state.selection_state = None
     if "click_selection" not in st.session_state:
@@ -397,23 +399,27 @@ def main(analyis_mode):
 
                     st.session_state.click_selection = False
 
-                elif st.session_state.selected_cluster in [None, ALL_KEY]:
+                elif len(st.session_state.filtered_clusters) == 0:
                     st.write(
                     """
                     **Tips:**
                     - Select a category to start exploring the themes and topics of the podcast
                     - Each point represents an episode and similar episodes are visualised closer to each other.
                     - Click on a point to show episode details.
+
+                    **Note:** All insights are generated automatically with the help of AI and may contain inaccuracies.
                     """
                     )
                     
                 else:
-                                        """
+                    """
                     **Tips:**
 
                     - Enable/disable clusters by clicking the names in the legend.
-                    -  Select a cluster by double clicking the name on the legend.
+                    - Select a cluster by double clicking the name on the legend.
                     - Click on a point to show episode details.
+
+                    **Note:** All insights are generated automatically with the help of AI and may contain inaccuracies.
                     """
 
         st.caption("✨ Leveraging AI to explore content instead of generating it ✨")
