@@ -11,7 +11,7 @@ from streamlit.runtime.scriptrunner import StopException
 
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
-EPISODE_LIMIT = 700
+EPISODE_LIMIT = 1000
 DEFAULT_MODE = "active"
 
 
@@ -34,7 +34,7 @@ def load_data(url, checkpoint):
     if url:
         llm_api_key = os.environ.get("OPENAI_API_KEY")
         extraction_model = os.environ.get("EXTRACTION_MODEL", "gpt-4o-mini")
-        analyis_model = os.environ.get("ANALYSIS_MODEL", None)
+        analyis_model = os.environ.get("ANALYSIS_MODEL", "gpt-4o")
         analyzer = RSSFeedAnalyzer(rss_url=url, 
                                    llm_api_key=llm_api_key,
                                    extraction_model=extraction_model,

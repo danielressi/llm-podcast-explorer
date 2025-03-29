@@ -18,6 +18,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from pydantic import BaseModel, Field, RootModel, field_validator
 from rss_feed_loader import RSSFeedLoader
@@ -78,7 +79,21 @@ class TextCatalogEntry(BaseModel):
     def to_text(self):
         return "\n".join([f"{k}:{v}" for k,v in self.model_dump().items()])
 
-
+def get_rate_limiter(model="gpt-4o-mini"):
+    if model == "gpt-4o":
+        return InMemoryRateLimiter(
+            requests_per_second=0.5,         # 1 request every 2 seconds
+            check_every_n_seconds=0.1,       # Check every 100 ms
+            max_bucket_size=5                # Allow bursts of 5 requests max
+        )
+    elif model == "gpt-4o-mini":
+        return InMemoryRateLimiter(
+            requests_per_second=1.0,         # 1 request per second
+            check_every_n_seconds=0.05,      # Check more frequently if you want
+            max_bucket_size=10               # Higher burst capacity
+        )
+    else:
+        return None
 
 class RSSFeedAnalyzer:
     def __init__(
@@ -88,15 +103,20 @@ class RSSFeedAnalyzer:
         extraction_model="gpt-4o-mini",
         embedding_model="text-embedding-3-small",
         analysis_model=None,
-        tempature=0.2,
+        tempature=0.1,
         logger=None,
         ):
         self.rss_loader = RSSFeedLoader(rss_url)
         set_llm_cache(SQLiteCache(database_path=".langchain.db"))
-        self.extraction_llm = ChatOpenAI(model=extraction_model, api_key=llm_api_key, temperature=tempature)
-        self.analysis_llm = ChatOpenAI(model=analysis_model if analysis_model is not None else extraction_model, 
+        self.extraction_llm = ChatOpenAI(model=extraction_model,
+                                         api_key=llm_api_key, 
+                                         temperature=tempature,
+                                         rate_limiter=get_rate_limiter(extraction_model))
+        analysis_llm_name = analysis_model if analysis_model is not None else extraction_model
+        self.analysis_llm = ChatOpenAI(model=analysis_llm_name,
                                        api_key=llm_api_key,
-                                       temperature=tempature)
+                                       temperature=tempature,
+                                       rate_limiter=get_rate_limiter(analysis_llm_name))
         self.embeddings = self._init_embeddings(embedding_model)
         self._noise_title = "Sonstiges" if self.language == "de" else "Other"
 
@@ -227,31 +247,36 @@ class RSSFeedAnalyzer:
         return text_catalog
 
     @staticmethod
-    def _predict_clusters(vectors, cluster_offset=0, **kwargs):
-        aprox_cosine_vectors = normalize(vectors, norm="l2")
+    def _predict_clusters(vectors, cluster_offset=0, metric="cosine", **kwargs):
+        if metric == "cosine":
+            vectors = normalize(vectors, norm="l2")
         # approximate sklearn implementation if no value specified
         min_samples = kwargs.pop("min_samples", kwargs["min_cluster_size"] - 1)
-        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples).fit(aprox_cosine_vectors)
-        soft_clusters = pd.DataFrame(all_points_membership_vectors(c_model))
-        clusters_top_3 = pd.DataFrame(
-            soft_clusters.apply(lambda x: np.argsort(-x.values)[:3] + cluster_offset, axis=1).to_list()
-        )
-        clusters_top_3_proba = pd.DataFrame(
-            soft_clusters.apply(lambda x: np.sort(x.values)[::-1][:3], axis=1).to_list()
-        )
-        clusters_top_3[clusters_top_3_proba < 0.08] = -1
-        clusters_top_3.loc[:, 0] = c_model.labels_ + cluster_offset
+        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples).fit(vectors)
+        c_labels = c_model.labels_
+        c_labels[c_labels >= 0] = c_labels[c_labels >= 0] + cluster_offset
+        soft_clusters = all_points_membership_vectors(c_model)
+        
+        clusters_top_3 = pd.DataFrame(np.argsort(soft_clusters, axis=1)[:, ::-1][:,:3])
+        clusters_top_3_proba = pd.DataFrame(np.sort(soft_clusters, axis=1)[:, ::-1][:,:3])
+        
+        clusters_top_3[clusters_top_3_proba < 0.1] = -1
+        
+        #clusters_top_3.loc[:, 0] = c_labels
         return clusters_top_3
 
-    def _run_umap(self, vectors):
-        reducer = umap.UMAP(n_neighbors=30, n_jobs=-1, metric="cosine")
+    def _run_umap(self, vectors, metric, scale=True):
+        reducer = umap.UMAP(n_neighbors=100, n_jobs=-1, metric=metric, init='pca')
         embedding_2d = reducer.fit_transform(vectors)
-        return StandardScaler().fit_transform(embedding_2d)
+        if scale:
+            return embedding_2d - embedding_2d.mean(axis=0)
+        else:
+            return embedding_2d
 
-    def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True):
+    def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True, metric="cosine"):
         vectors = np.array(self.embeddings.embed_documents(text_catalog))
-        distances =pairwise_distances(vectors, metric="cosine")
-        embedding_2d = self._run_umap(vectors)
+        distances =pairwise_distances(vectors, metric=metric)
+        embedding_2d = self._run_umap(vectors, metric=metric)
         clusters_df = (
             pd.DataFrame({"text_catalog": text_catalog}, index=range(len(text_catalog)))
             .assign(is_extra=False)
@@ -259,9 +284,9 @@ class RSSFeedAnalyzer:
             .assign(umap_0=embedding_2d[:, 0])
             .assign(umap_1=embedding_2d[:, 1])
         )
-        initial_min_cluster_size = max(3, min(30, int(len(vectors) * 0.01)))
+        initial_min_cluster_size = max(3, min(30, int(len(vectors) * 0.02)))
         min_samples = max(2, int(initial_min_cluster_size * 0.9))
-        max_cluster_size = min(75, int(len(vectors) * 0.15))
+        max_cluster_size = min(75, int(len(vectors) * 0.1))
 
         cluster_data = embedding_2d if cluster_umap else vectors
 
@@ -270,29 +295,30 @@ class RSSFeedAnalyzer:
             min_cluster_size=initial_min_cluster_size,
             max_cluster_size=max_cluster_size,
             min_samples=min_samples,
+            metric=metric
         )
+        cluster_top_3.set_index(clusters_df.index, inplace=True)
+        
         clusters_df["cluster"] = cluster_top_3[0]
-
-        clusters_df["clusters_fuzzy"] = cluster_top_3.apply(lambda x: x.to_list(), axis=1)
+        
 
         unmatched = clusters_df.query("cluster == -1")
-        max_iter = 0
+        max_iter = 2
         i = 0
         n_unmatched_before = len(unmatched)
-        while (len(unmatched) / len(clusters_df)) > 0.15:
+        while (len(unmatched) / len(clusters_df)) > 0.15 and int(initial_min_cluster_size / ((i+1)*2)) >= 2:
             if i == max_iter:
                 print(f"Max iter for clustering reached. {len(unmatched)} points left without cluster")
                 break
             extra_clusters = self._predict_clusters(
                 vectors=cluster_data[unmatched.index.to_numpy()],
-                cluster_offset=clusters_df.cluster.max() + 1,
-                max_cluster_size=max_cluster_size,
-                min_cluster_size=max(2, initial_min_cluster_size - 5 * (i + 1)),
+                cluster_offset=cluster_top_3 .apply(max).max() + 1,
+                max_cluster_size=max(10, int(max_cluster_size*0.1)),
+                min_cluster_size=max(2, int(initial_min_cluster_size / ((i+1)*2))),
             )
+            extra_clusters.set_index(unmatched.index, inplace=True)
             clusters_df.loc[unmatched.index, "cluster"] = extra_clusters[0].values
-            clusters_df.loc[unmatched.index, "clusters_fuzzy"] = extra_clusters.apply(
-                lambda x: x.to_list(), axis=1
-            ).values
+            cluster_top_3.loc[unmatched.index, 0] =  extra_clusters[0]
             clusters_df.loc[unmatched.index, "is_extra"] = True
             clusters_df.loc[unmatched.index, "cluster_attempt"] = i + 1
 
@@ -301,6 +327,7 @@ class RSSFeedAnalyzer:
                 break
             i += 1
 
+        clusters_df["clusters_fuzzy"] = cluster_top_3.apply(lambda x: x.to_list(), axis=1)
         return clusters_df, distances
 
     def _cluster_text_catalog(self, text_catalog):
@@ -378,6 +405,9 @@ class RSSFeedAnalyzer:
             - Targeted: Depending on the content the titles should be factual, funny, dramatic etc.
             - Conciseness: Keep the title concise ideally no longer than 5 words.
             - Coherence: The title must be meaningful and must not sound artificial.
+        
+        Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
+        Example Output: ['The Hidden Designs That Shape Our World']
     """
     def _generate_cluster_titles(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=ClusterTitlesBatch)
@@ -390,10 +420,10 @@ class RSSFeedAnalyzer:
 
                 Follow these instructions strictly:
 
-                - Accurate: Precisely represent the core themes that are listed in the documents.
+                - Accurate: The title must represent the core themes that are listed in the documents.
+                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents. Do not include details in the title that are only applicable to a subset of the documents.
                 - Concise: Title must not exceed five words.
                 - Engaging: Match the appropriate tone (factual, humorous, dramatic, etc.) based on content.
-                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents.
                 - Natural: Ensure the title sounds authentic and human-like, never artificial.
 
                 Think step-by-step: Reflect on core themes → Determine appropriate tone → Generate concise and coherent title.
@@ -402,9 +432,7 @@ class RSSFeedAnalyzer:
                  - The output list must be the same length as the input list
                  - The original language must be maintained. Do not change the language!
                  - The output must be a valid JSON in the format: {schema}
-                
-                Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
-                Example Output: ['The Hidden Designs That Shape Our World']
+            
                 """,
             ),
             ("user", "Input: {data}"),
@@ -418,7 +446,7 @@ class RSSFeedAnalyzer:
             lambda x: retry_parser.parse_with_prompt(completion=x["completion"].content, prompt_value=x["prompt_value"])
         )
 
-        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, key="text_catalog", batch_size=1000)
+        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, key="text_catalog", batch_size=5000)
         batched_prompts = []
 
         for batch in batched_text_catalog:
@@ -475,9 +503,10 @@ class RSSFeedAnalyzer:
                 **Consolidation Principles:**
 
                 - **Extreme Caution**: Only consolidate titles if their meanings are *clearly and unambiguously identical or synonymous*. If there is any ambiguity, variation in nuance, scope, or intent — do **not** group them.
-                - **Minimal Grouping**: Most titles will **not** have suitable matches. Only a very small number of highly similar titles should be grouped together. If you are not certain, leave the title out of the mapping.
+                - **Minimal Grouping**: Consolidation is a rare scenario. Most titles will be unique already. It is highly unlikely that more than 5 titles should be grouped together.
                 - **No Information Loss**: Never merge titles if doing so risks omitting meaningful differences or specific details. Be especially careful with compound titles or those containing historical, cultural, or technical qualifiers.
                 - **Thoughtful Abstraction**: The generalized title should be *newly created* — a succinct abstraction of the grouped titles' core meaning. Avoid copying any single original title directly unless it is already appropriately general.
+                - **Uniquness**: Try to reduce repetitiveness across the consolidated titles and use more general but unique titles instead.
 
 
                 **Constraints (Hard rules):**
@@ -505,6 +534,7 @@ class RSSFeedAnalyzer:
             if len(r_titles) > 0:
                 clusters_df.loc[clusters_df["title"].isin(r_titles), "consolidated_title"] = c_title
 
+        assert  (clusters_df.groupby("cluster")["consolidated_title"].nunique() == 1).all()
         clusters_unique_df = clusters_df.groupby("cluster")["consolidated_title"].first()
         clusters_unique_df.loc[-1] = self._noise_title
 
@@ -540,10 +570,11 @@ class RSSFeedAnalyzer:
 
                 Consider the following guidelines:
                     - Generalsation: Each group should reflect a broader category that accurately captures the essence of its titles. Categories should be general but relevant subtopics of the overall podcast theme.
-                    - Relevance: Only group together titles that are meaningfully related. Each category should be distinct and coherent.
+                    - Relevance: Only group together titles that fit into the same category. Each category should be distinct and coherent. Very similar clusters must not be spread out into different categories.
                     - Completeness: Every title must be included in a category. If some titles don’t fit into existing groups, create one or more "miscellaneous" categories that still reflect a common thread.
                     - Conciseness: Keep the category name concise ideally no longer than 5 words.
                     - Reduction: One category should contain around 2 to 4 cluster titles and must not contain more than 6 titles.
+                    - Engaging: Make sure that the consolidated titles sound natural but also engaging and unique. Avoid repeating the same key words.
                                  
                 Constraints (Hard rules): 
                  - The original language ({language}) must be maintained.

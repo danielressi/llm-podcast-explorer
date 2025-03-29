@@ -7,7 +7,7 @@ from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 class RSSFeedItem(BaseModel):
-    index: int = Field(..., description="indext of rss feed")
+    index: int = Field(..., description="index of rss feed")
     title: str = Field(..., description="The title of the episode")
     subtitle: Optional[str] = Field(default=None, description="The subtitle of the episode")
     description: Optional[str] = Field(default=None, description="The description of the episode", validation_alias=AliasChoices( "description", "summary"))

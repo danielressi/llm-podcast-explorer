@@ -193,7 +193,7 @@ def extract_customdata(node):
         ]
 
 
-def create_figure(G, global_positions, clusters):
+def create_figure(G, global_positions, clusters, show_grid=False):
     fig = go.Figure()
     cluster_edges_indices = {c: set() for c in clusters}
     cluster_node_indices = {c: set() for c in clusters}
@@ -261,12 +261,12 @@ def create_figure(G, global_positions, clusters):
             name="Nodes",
         )
     )
-
+    
     fig.update_layout(
         # title_font=dict(size=20, color="#333"),  # Dark gray for a clean look
         # showlegend=True,
-        xaxis=dict(showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False),
+        xaxis=dict(showgrid=show_grid, zeroline=show_grid, visible=show_grid),
+        yaxis=dict(showgrid=show_grid, zeroline=show_grid, visible=show_grid),
         margin=dict(l=20, r=20, t=10, b=10),
         # plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
         # paper_bgcolor="#F0F2F6",  # Ensures smooth blending
