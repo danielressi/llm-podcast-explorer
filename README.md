@@ -1,4 +1,4 @@
-# LLM Podcast Explorer
+# FeedPAM - LLM Podcast Explorer
 
 **Explore the Big Picture Behind Every Podcast**
 
