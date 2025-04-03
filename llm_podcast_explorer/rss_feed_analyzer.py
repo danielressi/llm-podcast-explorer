@@ -252,7 +252,7 @@ class RSSFeedAnalyzer:
             vectors = normalize(vectors, norm="l2")
         # approximate sklearn implementation if no value specified
         min_samples = kwargs.pop("min_samples", kwargs["min_cluster_size"] - 1)
-        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples).fit(vectors)
+        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples, cluster_selection_method='leaf').fit(vectors)
         c_labels = c_model.labels_
         c_labels[c_labels >= 0] = c_labels[c_labels >= 0] + cluster_offset
         soft_clusters = all_points_membership_vectors(c_model)
@@ -423,7 +423,7 @@ class RSSFeedAnalyzer:
                 - Accurate: The title must represent the core themes that are listed in the documents.
                 - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents. Do not include details in the title that are only applicable to a subset of the documents.
                 - Concise: Title must not exceed five words.
-                - Engaging: Match the appropriate tone (factual, humorous, dramatic, etc.) based on content.
+                - Engaging: Match the appropriate writing style and tone (factual, humorous, dramatic, etc.) of the original documents (Summary section).
                 - Natural: Ensure the title sounds authentic and human-like, never artificial.
 
                 Think step-by-step: Reflect on core themes → Determine appropriate tone → Generate concise and coherent title.
