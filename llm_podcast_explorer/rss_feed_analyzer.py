@@ -65,8 +65,8 @@ class ConsolidatedTitles(Mapping):
     
 
 class TextCatalogEntry(BaseModel):
-    summary: str= Field(..., description="Summaries of the episode")
     themes: str = Field(..., description="Themes of the episode")
+    summary: str= Field(..., description="Summaries of the episode")
     tags: str = Field(..., description="Tags of the episode")
 
     @field_validator('summary', 'themes',"tags", mode='before')
@@ -77,7 +77,7 @@ class TextCatalogEntry(BaseModel):
         return v
     
     def to_text(self):
-        return "\n".join([f"{k}:{v}" for k,v in self.model_dump().items()])
+        return "\n ".join([f"{k.capitalize()}:{v}" for k,v in self.model_dump().items()])
 
 def get_rate_limiter(model="gpt-4o-mini"):
     if model == "gpt-4o":
@@ -261,12 +261,12 @@ class RSSFeedAnalyzer:
         clusters_top_3_proba = pd.DataFrame(np.sort(soft_clusters, axis=1)[:, ::-1][:,:3])
         
         clusters_top_3[clusters_top_3_proba < 0.1] = -1
-        
+        clusters_top_3[clusters_top_3 != -1] += cluster_offset
         #clusters_top_3.loc[:, 0] = c_labels
         return clusters_top_3
 
-    def _run_umap(self, vectors, metric, scale=True):
-        reducer = umap.UMAP(n_neighbors=100, n_jobs=-1, metric=metric, init='pca')
+    def _run_umap(self, vectors, metric, scale=True, **kwargs):
+        reducer = umap.UMAP(n_jobs=-1, metric=metric, init='pca', **kwargs)
         embedding_2d = reducer.fit_transform(vectors)
         if scale:
             return embedding_2d - embedding_2d.mean(axis=0)
@@ -276,7 +276,16 @@ class RSSFeedAnalyzer:
     def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True, metric="cosine"):
         vectors = np.array(self.embeddings.embed_documents(text_catalog))
         distances =pairwise_distances(vectors, metric=metric)
-        embedding_2d = self._run_umap(vectors, metric=metric)
+        embedding_5d = self._run_umap(vectors, 
+                                      metric=metric, 
+                                      n_neighbors=10, 
+                                      min_dist=0.05,
+                                      n_components=5)
+        embedding_2d = self._run_umap(vectors, 
+                                      metric=metric, 
+                                      n_neighbors=10, 
+                                      min_dist=0.05,
+                                      n_components=2)
         clusters_df = (
             pd.DataFrame({"text_catalog": text_catalog}, index=range(len(text_catalog)))
             .assign(is_extra=False)
@@ -285,10 +294,10 @@ class RSSFeedAnalyzer:
             .assign(umap_1=embedding_2d[:, 1])
         )
         initial_min_cluster_size = max(3, min(30, int(len(vectors) * 0.02)))
-        min_samples = max(2, int(initial_min_cluster_size * 0.9))
+        min_samples = max(2, int(initial_min_cluster_size * 0.8))
         max_cluster_size = min(75, int(len(vectors) * 0.1))
 
-        cluster_data = embedding_2d if cluster_umap else vectors
+        cluster_data = embedding_5d if cluster_umap else vectors
 
         cluster_top_3 = self._predict_clusters(
             vectors=cluster_data,
@@ -312,7 +321,7 @@ class RSSFeedAnalyzer:
                 break
             extra_clusters = self._predict_clusters(
                 vectors=cluster_data[unmatched.index.to_numpy()],
-                cluster_offset=cluster_top_3 .apply(max).max() + 1,
+                cluster_offset=cluster_top_3.apply(max).max() + 1,
                 max_cluster_size=max(10, int(max_cluster_size*0.1)),
                 min_cluster_size=max(2, int(initial_min_cluster_size / ((i+1)*2))),
             )
@@ -421,7 +430,8 @@ class RSSFeedAnalyzer:
                 Follow these instructions strictly:
 
                 - Accurate: The title must represent the core themes that are listed in the documents.
-                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents. Do not include details in the title that are only applicable to a subset of the documents.
+                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents. 
+                - Broad: Do not include specific details in the title that are only applicable to a subset of the documents. Do not add specific epochs, years or places to the title.
                 - Concise: Title must not exceed five words.
                 - Engaging: Match the appropriate writing style and tone (factual, humorous, dramatic, etc.) of the original documents (Summary section).
                 - Natural: Ensure the title sounds authentic and human-like, never artificial.
@@ -446,7 +456,7 @@ class RSSFeedAnalyzer:
             lambda x: retry_parser.parse_with_prompt(completion=x["completion"].content, prompt_value=x["prompt_value"])
         )
 
-        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, key="text_catalog", batch_size=5000)
+        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, key="text_catalog", batch_size=8000)
         batched_prompts = []
 
         for batch in batched_text_catalog:

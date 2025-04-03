@@ -407,7 +407,7 @@ def main(analyis_mode):
                     - Each point represents an episode and similar episodes are visualised closer to each other.
                     - Click on a point to show episode details.
 
-                    **Note:** All insights are generated automatically with the help of AI and may contain inaccuracies.
+                    **Note:** All insights are generated automatically with AI and may contain inaccuracies.
                     """
                     )
                     
@@ -419,7 +419,7 @@ def main(analyis_mode):
                     - Select a cluster by double clicking the name on the legend.
                     - Click on a point to show episode details.
 
-                    **Note:** All insights are generated automatically with the help of AI and may contain inaccuracies.
+                    **Note:** All insights are generated automatically with AI and may contain inaccuracies.
                     """
 
         st.caption("✨ Leveraging AI to explore content instead of generating it ✨")
