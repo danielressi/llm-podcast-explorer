@@ -377,7 +377,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                     visible=True,
                     textposition="top center",
                     showlegend=False,
-                    text=f"<b>{text_with_line_breaks(selection_data["customdata"][0])}</b>" if not HOVER_ENABLED else None,
+                    text=f"<b>{text_with_line_breaks(selection_data['customdata'][0])}</b>" if not HOVER_ENABLED else None,
                     marker=dict(size=22, color=SELECT_COLOR, line=dict(color=highlight_color, width=7)),
                     customdata=[selection_data["customdata"]],  # Store node_text in customdata
                     hovertemplate=HOVERTEMPLATE,
