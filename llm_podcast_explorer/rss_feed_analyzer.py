@@ -2,7 +2,7 @@ import itertools
 import json
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Any
 
 import numpy as np
 import pandas as pd
@@ -18,8 +18,9 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, Field, RootModel, field_validator
 from rss_feed_loader import RSSFeedLoader
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler, normalize
@@ -41,31 +42,81 @@ class ClusterTitlesBatch(BaseModel):
     items: List[str] = Field(..., description="Batch of cluster titles")
 
 
-class MajorCategories(BaseModel):
+class Mapping(BaseModel):
+    mapping: Dict[str, List[str]] = Field(..., description="Mapping")
+                  
+    @field_validator('mapping', mode='before')
+    @classmethod
+    def enforce_list(cls, value: Any) -> str:
+        return {k: list(v.values()) if isinstance(v, dict) else list(v) for k, v in value.items()}
+
+class MajorCategories(Mapping):
     mapping: Dict[str, List[str]] = Field(
         ..., description="Mapping from identified major categories to all the titles that belong to the major category."
     )
 
 
-class ConsolidatedTitles(BaseModel):
+class ConsolidatedTitles(Mapping):
     mapping: Dict[str, List[str]] = Field(
         ...,
         description="Mapping of consolidated titles to the corresponding titles that are semantically too similar, duplicates or synonyms",
     )
 
+    
+
+class TextCatalogEntry(BaseModel):
+    themes: str = Field(..., description="Themes of the episode")
+    summary: str= Field(..., description="Summaries of the episode")
+    tags: str = Field(..., description="Tags of the episode")
+
+    @field_validator('summary', 'themes',"tags", mode='before')
+    @classmethod
+    def convert_list_to_str(cls, v: Any) -> str:
+        if isinstance(v, list):
+            return ",".join(v)
+        return v
+    
+    def to_text(self):
+        return "\n ".join([f"{k.capitalize()}:{v}" for k,v in self.model_dump().items()])
+
+def get_rate_limiter(model="gpt-4o-mini"):
+    if model == "gpt-4o":
+        return InMemoryRateLimiter(
+            requests_per_second=0.5,         # 1 request every 2 seconds
+            check_every_n_seconds=0.1,       # Check every 100 ms
+            max_bucket_size=5                # Allow bursts of 5 requests max
+        )
+    elif model == "gpt-4o-mini":
+        return InMemoryRateLimiter(
+            requests_per_second=1.0,         # 1 request per second
+            check_every_n_seconds=0.05,      # Check more frequently if you want
+            max_bucket_size=10               # Higher burst capacity
+        )
+    else:
+        return None
 
 class RSSFeedAnalyzer:
     def __init__(
         self,
         rss_url,
-        model="gpt-4o-mini",
         llm_api_key=None,
-        logger=None,
+        extraction_model="gpt-4o-mini",
         embedding_model="text-embedding-3-small",
+        analysis_model=None,
+        tempature=0.1,
+        logger=None,
         ):
         self.rss_loader = RSSFeedLoader(rss_url)
         set_llm_cache(SQLiteCache(database_path=".langchain.db"))
-        self.llm = ChatOpenAI(model=model, api_key=llm_api_key, temperature=0.2)
+        self.extraction_llm = ChatOpenAI(model=extraction_model,
+                                         api_key=llm_api_key, 
+                                         temperature=tempature,
+                                         rate_limiter=get_rate_limiter(extraction_model))
+        analysis_llm_name = analysis_model if analysis_model is not None else extraction_model
+        self.analysis_llm = ChatOpenAI(model=analysis_llm_name,
+                                       api_key=llm_api_key,
+                                       temperature=tempature,
+                                       rate_limiter=get_rate_limiter(analysis_llm_name))
         self.embeddings = self._init_embeddings(embedding_model)
         self._noise_title = "Sonstiges" if self.language == "de" else "Other"
 
@@ -106,7 +157,7 @@ class RSSFeedAnalyzer:
             namespace=embeddings.model,  # Create a cache-backed embedder using the base embedding and storage
         )
 
-    def analyze_feed(self, limit=10000):
+    def analyze_feed(self, limit=10000, batch_size=56):
         episode_loader = self.rss_loader.lazy_load()
         self.logger.info(f"Analyzing {self.size} podcast episdoes")
         parser = PydanticOutputParser(pydantic_object=EpisodeInsights)
@@ -131,7 +182,6 @@ class RSSFeedAnalyzer:
             Constraints:
                 - The tags and themes must be in the same language as the input
                 - Output your answer as JSON that matches the given schema: {format_instructions}.
-             
             
             """,
             ),
@@ -144,8 +194,8 @@ class RSSFeedAnalyzer:
             podcast_description=self.rss_loader.description,
         )
 
-        request_chain = prompt_template | self.llm
-        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.llm, max_retries=2)
+        request_chain = prompt_template | self.extraction_llm
+        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.extraction_llm, max_retries=2)
 
         chain = RunnableParallel(
             completion=request_chain,
@@ -160,7 +210,7 @@ class RSSFeedAnalyzer:
         analysis_results = []
         batch_content = []
         batch_metadata = []
-        batch_size = 56
+        
         for i, episode in enumerate(episode_loader):
             if i > limit:
                 break
@@ -176,7 +226,7 @@ class RSSFeedAnalyzer:
             else:
                 if len(episode.description) > 0:
                     batch_content.append({"title": episode.title, "episode_content": episode.description[:1500]})
-                    batch_metadata.append(episode.model_dump(exclude="description"))
+                    batch_metadata.append(episode.model_dump())
 
         if len(batch_content) > 0:
                 response = chain.batch(batch_content)
@@ -190,42 +240,52 @@ class RSSFeedAnalyzer:
     def _create_episode_text_catalog(self, analysed_episodes):
         text_catalog = {}
         for ep in analysed_episodes:
-            ep_themes = ",".join(ep.insights.inferred_themes)
-            ep_tags = ",".join(ep.insights.tags)
-            text_catalog[ep.metadata.index] = (
-                f"Themes:{ep_themes}\n"
-                f"Summary:{ep.insights.summary}\n"
-                f"Tags:{ep_tags}\n"
-            )
+            text_catalog[ep.metadata.index] = TextCatalogEntry(themes=ep.insights.inferred_themes, 
+                                                               tags=ep.insights.tags,
+                                                               summary=ep.insights.summary)
 
         return text_catalog
 
     @staticmethod
-    def _predict_clusters(vectors, cluster_offset=0, **kwargs):
-        aprox_cosine_vectors = normalize(vectors, norm="l2")
+    def _predict_clusters(vectors, cluster_offset=0, metric="cosine", **kwargs):
+        if metric == "cosine":
+            vectors = normalize(vectors, norm="l2")
         # approximate sklearn implementation if no value specified
         min_samples = kwargs.pop("min_samples", kwargs["min_cluster_size"] - 1)
-        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples).fit(aprox_cosine_vectors)
-        soft_clusters = pd.DataFrame(all_points_membership_vectors(c_model))
-        clusters_top_3 = pd.DataFrame(
-            soft_clusters.apply(lambda x: np.argsort(-x.values)[:3] + cluster_offset, axis=1).to_list()
-        )
-        clusters_top_3_proba = pd.DataFrame(
-            soft_clusters.apply(lambda x: np.sort(x.values)[::-1][:3], axis=1).to_list()
-        )
-        clusters_top_3[clusters_top_3_proba < 0.08] = -1
-        clusters_top_3.loc[:, 0] = c_model.labels_ + cluster_offset
+        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples, cluster_selection_method='leaf').fit(vectors)
+        c_labels = c_model.labels_
+        c_labels[c_labels >= 0] = c_labels[c_labels >= 0] + cluster_offset
+        soft_clusters = all_points_membership_vectors(c_model)
+        
+        clusters_top_3 = pd.DataFrame(np.argsort(soft_clusters, axis=1)[:, ::-1][:,:3])
+        clusters_top_3_proba = pd.DataFrame(np.sort(soft_clusters, axis=1)[:, ::-1][:,:3])
+        
+        clusters_top_3[clusters_top_3_proba < 0.1] = -1
+        clusters_top_3[clusters_top_3 != -1] += cluster_offset
+        #clusters_top_3.loc[:, 0] = c_labels
         return clusters_top_3
 
-    def _run_umap(self, vectors):
-        reducer = umap.UMAP(n_neighbors=20, n_jobs=-1)
+    def _run_umap(self, vectors, metric, scale=True, **kwargs):
+        reducer = umap.UMAP(n_jobs=-1, metric=metric, init='pca', **kwargs)
         embedding_2d = reducer.fit_transform(vectors)
-        return StandardScaler().fit_transform(embedding_2d)
+        if scale:
+            return embedding_2d - embedding_2d.mean(axis=0)
+        else:
+            return embedding_2d
 
-    def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True):
+    def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True, metric="cosine"):
         vectors = np.array(self.embeddings.embed_documents(text_catalog))
-        distances =pairwise_distances(vectors, metric="cosine")
-        embedding_2d = self._run_umap(vectors)
+        distances =pairwise_distances(vectors, metric=metric)
+        embedding_5d = self._run_umap(vectors, 
+                                      metric=metric, 
+                                      n_neighbors=10, 
+                                      min_dist=0.05,
+                                      n_components=5)
+        embedding_2d = self._run_umap(vectors, 
+                                      metric=metric, 
+                                      n_neighbors=10, 
+                                      min_dist=0.05,
+                                      n_components=2)
         clusters_df = (
             pd.DataFrame({"text_catalog": text_catalog}, index=range(len(text_catalog)))
             .assign(is_extra=False)
@@ -234,39 +294,40 @@ class RSSFeedAnalyzer:
             .assign(umap_1=embedding_2d[:, 1])
         )
         initial_min_cluster_size = max(3, min(30, int(len(vectors) * 0.02)))
-        min_samples = max(2, int(initial_min_cluster_size * 0.75))
-        max_cluster_size = min(75, int(len(vectors) * 0.12))
+        min_samples = max(2, int(initial_min_cluster_size * 0.8))
+        max_cluster_size = min(75, int(len(vectors) * 0.1))
 
-        cluster_data = embedding_2d if cluster_umap else vectors
+        cluster_data = embedding_5d if cluster_umap else vectors
 
         cluster_top_3 = self._predict_clusters(
             vectors=cluster_data,
             min_cluster_size=initial_min_cluster_size,
             max_cluster_size=max_cluster_size,
             min_samples=min_samples,
+            metric=metric
         )
+        cluster_top_3.set_index(clusters_df.index, inplace=True)
+        
         clusters_df["cluster"] = cluster_top_3[0]
-
-        clusters_df["clusters_fuzzy"] = cluster_top_3.apply(lambda x: x.to_list(), axis=1)
+        
 
         unmatched = clusters_df.query("cluster == -1")
-        max_iter = 10
+        max_iter = 2
         i = 0
         n_unmatched_before = len(unmatched)
-        while (len(unmatched) / len(clusters_df)) > 0.15:
+        while (len(unmatched) / len(clusters_df)) > 0.15 and int(initial_min_cluster_size / ((i+1)*2)) >= 2:
             if i == max_iter:
                 print(f"Max iter for clustering reached. {len(unmatched)} points left without cluster")
                 break
             extra_clusters = self._predict_clusters(
                 vectors=cluster_data[unmatched.index.to_numpy()],
-                cluster_offset=clusters_df.cluster.max() + 1,
-                max_cluster_size=max_cluster_size,
-                min_cluster_size=max(2, initial_min_cluster_size - 5 * (i + 1)),
+                cluster_offset=cluster_top_3.apply(max).max() + 1,
+                max_cluster_size=max(10, int(max_cluster_size*0.1)),
+                min_cluster_size=max(2, int(initial_min_cluster_size / ((i+1)*2))),
             )
+            extra_clusters.set_index(unmatched.index, inplace=True)
             clusters_df.loc[unmatched.index, "cluster"] = extra_clusters[0].values
-            clusters_df.loc[unmatched.index, "clusters_fuzzy"] = extra_clusters.apply(
-                lambda x: x.to_list(), axis=1
-            ).values
+            cluster_top_3.loc[unmatched.index, 0] =  extra_clusters[0]
             clusters_df.loc[unmatched.index, "is_extra"] = True
             clusters_df.loc[unmatched.index, "cluster_attempt"] = i + 1
 
@@ -275,10 +336,12 @@ class RSSFeedAnalyzer:
                 break
             i += 1
 
+        clusters_df["clusters_fuzzy"] = cluster_top_3.apply(lambda x: x.to_list(), axis=1)
         return clusters_df, distances
 
     def _cluster_text_catalog(self, text_catalog):
-        clusters_df, distances = self._embedd_cluster_reduce(list(text_catalog.values()))
+        clusters_df, distances = self._embedd_cluster_reduce([entry.to_text() for entry in text_catalog.values()])
+        clusters_df["themes"] = [entry.themes for entry in text_catalog.values()]
         clusters_df["episode_index"] = list(text_catalog.keys())
         distance_map = {}
         for x, y in itertools.combinations(range(len(distances)), 2):
@@ -334,45 +397,66 @@ class RSSFeedAnalyzer:
 
         return batches, cluster_batches
 
+
+    """
+        Create an authentic, engaging, and concise title (max. 5 words) in {language} for a group of related documents. 
+        Your title must accurately reflect the documents' main themes, convey their essence clearly, and match their intended tone (factual, humorous, dramatic, etc.). 
+        Prioritize coherence and natural expression.
+
+        You are an expert in gerneralizing semantic content.
+        Your task is to provide a poignant, authentic and concise title in {language} for a group of related documents. 
+        The title must accuractely capture the essence of the documents and the mentioned themes, while also being engaging.  
+        
+        Consider the following guidelines:
+            - Generalsation: Capture the bigger picture behind the group of documents.
+            - Focus on themes: The documents contain themes. The title should reflect these themes.
+            - Relevance: The title must reflect the core ideas and themes present in the documents.
+            - Targeted: Depending on the content the titles should be factual, funny, dramatic etc.
+            - Conciseness: Keep the title concise ideally no longer than 5 words.
+            - Coherence: The title must be meaningful and must not sound artificial.
+        
+        Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
+        Example Output: ['The Hidden Designs That Shape Our World']
+    """
     def _generate_cluster_titles(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=ClusterTitlesBatch)
         prompt_template = ChatPromptTemplate([
             (
                 "system",
                 """
-                You are an expert in gerneralizing semantic content into short titles.
-                Your task is to provide a poignant, evocative, and concise title in {language} for a group of related documents. 
-                The title should capture the essence, themes and emotional tone of the documents while being engaging.  
-                
-                Consider the following guidelines:
-                    - Generalsation: Capturing the bigger ideas and topics behind the selected documents.
-                    - Relevance: The title must reflect the core ideas, topics, or narratives present in the documents.
-                    - Targeted: Depending on the content the titles should be factual, funny, dramatic etc.
-                    - Conciseness: Keep the title concise ideally no longer than 5 words.
-                    - Cohesion: The title must be a cohesive, meaningful and correct with respect to the context
+                You are an expert title generator with a focus on the bigger picture.
+                Given a set of related documents with shared themes, generate an authentic, concise, and engaging title (max. 5 words) in {language}.
+
+                Follow these instructions strictly:
+
+                - Accurate: The title must represent the core themes that are listed in the documents.
+                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents. 
+                - Broad: Do not include specific details in the title that are only applicable to a subset of the documents. Do not add specific epochs, years or places to the title.
+                - Concise: Title must not exceed five words.
+                - Engaging: Match the appropriate writing style and tone (factual, humorous, dramatic, etc.) of the original documents (Summary section).
+                - Natural: Ensure the title sounds authentic and human-like, never artificial.
+
+                Think step-by-step: Reflect on core themes → Determine appropriate tone → Generate concise and coherent title.
                                  
                 Constraints (Hard rules): 
                  - The output list must be the same length as the input list
                  - The original language must be maintained. Do not change the language!
                  - The output must be a valid JSON in the format: {schema}
-                
-                Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
-                Example Output: ['The Hidden Designs That Shape Our World']
+            
                 """,
             ),
             ("user", "Input: {data}"),
         ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
 
-        # chain = prompt_template | self.llm | parser
         self.logger.info("Consolidating episodes")
 
-        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.llm, max_retries=2)
+        retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.analysis_llm, max_retries=2)
 
-        chain = RunnableParallel(completion=prompt_template | self.llm, prompt_value=prompt_template) | RunnableLambda(
+        chain = RunnableParallel(completion=prompt_template | self.analysis_llm, prompt_value=prompt_template) | RunnableLambda(
             lambda x: retry_parser.parse_with_prompt(completion=x["completion"].content, prompt_value=x["prompt_value"])
         )
 
-        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, batch_size=1000)
+        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, key="text_catalog", batch_size=8000)
         batched_prompts = []
 
         for batch in batched_text_catalog:
@@ -418,27 +502,34 @@ class RSSFeedAnalyzer:
             (
                 "system",
                 """
-                You are an expert in consolidating and generalizing text. Your task is to analyze a list of titles and identify titles that are semantic duplicates or synonyms.  
-                The mapping should look like this:
-                    - **Keys**: Consolidated titles.  
-                    - **Values**: A list of redundant titles that are unified to the consolidated title. 
+                You are an expert in text analysis and semantic consolidation.
 
-                ### **Guidelines for Consolidation:**  
-                1. **Redundancy**: If a title does not introduce new information (semantic duplicates) it should be merged with the related title.  
-                2. **Simplicity**: The consolidated titles should be concise and must not overstate the orignal meaning
-                3. **Precision**: Do not merge titles if you are unsure or if the consolidated group gets too broad or relevant information gets lost
-                4. **Representativeness: The consolidated title must plausible and correctly represent the merged titles.
+                You will receive a list of document titles. Your task is to identify **only those titles that are exact or near-exact semantic duplicates** and consolidate them under a single, generalized title.
 
-                ### **Constraints (Hard rules):**
+                Provide the output as a mapping using the following structure:
+                    Key: A single, generalized title that succinctly captures the shared meaning of its associated titles.
+                    Values: A list of the original, redundant titles that were grouped under this generalized title.
+
+                **Consolidation Principles:**
+
+                - **Extreme Caution**: Only consolidate titles if their meanings are *clearly and unambiguously identical or synonymous*. If there is any ambiguity, variation in nuance, scope, or intent — do **not** group them.
+                - **Minimal Grouping**: Consolidation is a rare scenario. Most titles will be unique already. It is highly unlikely that more than 5 titles should be grouped together.
+                - **No Information Loss**: Never merge titles if doing so risks omitting meaningful differences or specific details. Be especially careful with compound titles or those containing historical, cultural, or technical qualifiers.
+                - **Thoughtful Abstraction**: The generalized title should be *newly created* — a succinct abstraction of the grouped titles' core meaning. Avoid copying any single original title directly unless it is already appropriately general.
+                - **Uniquness**: Try to reduce repetitiveness across the consolidated titles and use more general but unique titles instead.
+
+
+                **Constraints (Hard rules):**
                 - The original language ({language}) must be maintained. 
                 - The output must be a valid JSON in the format: {schema}
                 - Unique titles should be ommitted from the mapping
+                - Ensure the results follow the consolidation guidelines
                 """,
             ),
             ("user", "Input: {data}"),
         ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
 
-        chain = prompt_template | self.llm | parser
+        chain = prompt_template | self.analysis_llm | parser
         self.logger.info("Consolidating clusters")
 
         cluster_titles = (
@@ -453,6 +544,7 @@ class RSSFeedAnalyzer:
             if len(r_titles) > 0:
                 clusters_df.loc[clusters_df["title"].isin(r_titles), "consolidated_title"] = c_title
 
+        assert  (clusters_df.groupby("cluster")["consolidated_title"].nunique() == 1).all()
         clusters_unique_df = clusters_df.groupby("cluster")["consolidated_title"].first()
         clusters_unique_df.loc[-1] = self._noise_title
 
@@ -475,6 +567,7 @@ class RSSFeedAnalyzer:
             consolidated_episodes.append(ep_copy)
 
         return AnalyzedEpisodes(episodes=consolidated_episodes), clusters_df
+    
 
     def _get_major_categories(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=MajorCategories)
@@ -482,26 +575,26 @@ class RSSFeedAnalyzer:
             (
                 "system",
                 """
-                You are an expert in consolidating and generalizing documents.
-                You will be provided with a list of titles and your task is to group related titles together into higher level topics (major categories).
-                
+                You are an expert in document clustering and topic generalization.
+                You will be given a list of podcast cluster titles. Your task is to group related titles into high-level topic categories.
+
                 Consider the following guidelines:
-                    - Generalsation: Capturing the bigger picture of groups of titles is essential. It should provide a broad grouping but still sub categories of the podcast itself.
-                    - Relevance: The identified parent topics should be unique and only related titles should be grouped together
-                    - Completeness: Every title should be assigned to a category. You can create also one or more category for diverse leftover titles, as long as the category should reflect this.
-                    - Conciseness: Keep the title concise ideally no longer than 5 words.
-                    - Reduction: The number of major categories should be much smaller than the child titles (Ideally around 5-10 % of the child titles, but one major category should also not contain more than 7-10 titles)
+                    - Generalsation: Each group should reflect a broader category that accurately captures the essence of its titles. Categories should be general but relevant subtopics of the overall podcast theme.
+                    - Relevance: Only group together titles that fit into the same category. Each category should be distinct and coherent. Very similar clusters must not be spread out into different categories.
+                    - Completeness: Every title must be included in a category. If some titles don’t fit into existing groups, create one or more "miscellaneous" categories that still reflect a common thread.
+                    - Conciseness: Keep the category name concise ideally no longer than 5 words.
+                    - Reduction: One category should contain around 2 to 4 cluster titles and must not contain more than 6 titles.
+                    - Engaging: Make sure that the consolidated titles sound natural but also engaging and unique. Avoid repeating the same key words.
                                  
                 Constraints (Hard rules): 
                  - The original language ({language}) must be maintained.
                  - The output must be a valid JSON in the format: {schema}
-
                 """,
             ),
             ("user", "Input: {data}"),
         ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
 
-        chain = prompt_template | self.llm | parser
+        chain = prompt_template | self.analysis_llm | parser
         self.logger.info("Consolidating episodes")
 
         cluster_titles = clusters_df["consolidated_title"].unique().tolist()
@@ -552,7 +645,7 @@ class RSSFeedAnalyzer:
         @progress_bar: st.progress widget
         """
         progress_bar.progress(
-            20, f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.llm.model_name}..."
+            20, f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.extraction_llm.model_name}..."
         )
         analysed_episodes = self.analyze_feed(limit)
 
@@ -560,13 +653,14 @@ class RSSFeedAnalyzer:
         progress_bar.progress(50, "Clustering episode summaries ...")
         text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
         summary_clusters, distance_map = self._cluster_text_catalog(text_catalog)
-        progress_bar.progress(70, f"Creating cluster titles with {self.llm.model_name}...")
+        progress_bar.progress(70, f"Creating cluster titles with {self.analysis_llm.model_name}...")
         clustered_episodes, titled_clusters = self._generate_cluster_titles(analysed_episodes, summary_clusters)
-        progress_bar.progress(80, f"Consolidating clusters with {self.llm.model_name}...")
+        progress_bar.progress(80, f"Consolidating clusters with {self.analysis_llm.model_name}...")
         consolidated_episodes, consolidated_clusters = self._consolidate_clusters(
             clustered_episodes, titled_clusters
         )
-        progress_bar.progress(90, f"Generating major categories with {self.llm.model_name}...")
+
+        progress_bar.progress(90, f"Generating major categories with {self.analysis_llm.model_name}...")
         finalized_episodes, final_clusters = self._get_major_categories(
             consolidated_episodes, consolidated_clusters
         )
@@ -574,7 +668,6 @@ class RSSFeedAnalyzer:
         finalized_episodes.extra["consolidation_map"] = (
             final_clusters.groupby("consolidated_title")["title"].apply(lambda x: list(set(x))).to_dict()
         )
-        # cluster_id_lookup = final_clusters.groupby("cluster")["consolidated_title"].first()
         self.logger.info("analysis completed")
         progress_bar.progress(95, "Preparing plot ...")
 

@@ -8,11 +8,11 @@ import plotly.graph_objects as go
 
 SCALE = 1
 HIGHLIGHT_COLOR = "rgba(214, 39, 40, 1)"
-SELECT_COLOR = "rgba(232, 228, 215, 0.8)"
+SELECT_COLOR = "rgba(232, 228, 215, 0.9)"
 HIGHLIGHT_COLOR_EDGE = "rgba(214, 39, 40, 0.4)"
 BACKGROUND_COLOR = "rgba(138, 138, 138, 0.2)"
 DEFAULT_NODE_COLOR = "rgba(138, 138, 138, 0.8)"
-EDGE_COSINE_THRESHOLD = 0.35
+EDGE_COSINE_THRESHOLD = 0.38
 COLOR_OPACITY = 0.6
 COLOR_CYCLE = [
     f"rgba(214, 39, 40, {COLOR_OPACITY})",  # Red
@@ -45,7 +45,25 @@ HOVER_MINIMAL = ("<b>%{customdata[0]}</b><br>"
 def extract_episode_selection_data(G, positions, episode):
     data = G.nodes[episode]
     x,y = positions[episode]
-    return dict(x=x, y=y, clusters=data["cluster"], customdata=extract_customdata(data),category=data["category"])
+    edges_x = []
+    edges_y = []
+    weights = []
+    for (ep_a, ep_b) in G.edges(episode):
+        xa, ya = positions[ep_a]
+        xb, yb = positions[ep_b]
+        edges_x.extend([xa, xb])
+        edges_y.extend([ya, yb])
+        edge_data = G.get_edge_data(ep_a, ep_b)
+        weights.append(edge_data["weight"] if "weight" in edge_data else 0)
+    
+    return dict(x=x, 
+                y=y, 
+                clusters=data["cluster"], 
+                customdata=extract_customdata(data),
+                category=data["category"],
+                edges_x=edges_x,
+                edges_y=edges_y,
+                weights=weights)
 
 def build_episode_lookup(G, global_positions, episodes):
     return {ep["metadata"]["title"]: extract_episode_selection_data(G, global_positions, ep["insights"]["episode_id"]) for ep in episodes["episodes"]}
@@ -79,7 +97,7 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
                 summary=ep["insights"]["summary"],
                 tags=ep["insights"]["tags"],
                 themes=ep["insights"]["inferred_themes"],
-                #category=category,
+                description=ep["metadata"]["description"] if "description" in ep["metadata"] else None,
                 #clusters=", ".join(cluster_titles),
                 # clusters_raw=ep["clusters"]["titles"],
                 #cluster_attempt=ep["clusters"]["attempt"],
@@ -175,7 +193,7 @@ def extract_customdata(node):
         ]
 
 
-def create_figure(G, global_positions, clusters):
+def create_figure(G, global_positions, clusters, show_grid=False):
     fig = go.Figure()
     cluster_edges_indices = {c: set() for c in clusters}
     cluster_node_indices = {c: set() for c in clusters}
@@ -243,12 +261,12 @@ def create_figure(G, global_positions, clusters):
             name="Nodes",
         )
     )
-
+    
     fig.update_layout(
         # title_font=dict(size=20, color="#333"),  # Dark gray for a clean look
         # showlegend=True,
-        xaxis=dict(showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False),
+        xaxis=dict(showgrid=show_grid, zeroline=show_grid, visible=show_grid),
+        yaxis=dict(showgrid=show_grid, zeroline=show_grid, visible=show_grid),
         margin=dict(l=20, r=20, t=10, b=10),
         # plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
         # paper_bgcolor="#F0F2F6",  # Ensures smooth blending
@@ -266,7 +284,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
         fig.update_layout(xaxis=dict(showgrid=True, zeroline=True, visible=True),
                           legend=dict(y=-0.5),)
 
-    if selected_category == "All":
+    if (selected_category == "All") and not clicked:
         return fig, None
 
     selected_clusters = list(filtered_clusters.keys())
@@ -274,7 +292,8 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
     # fig.update_traces(hovertemplate=None)
     min_x, max_x = np.inf, -np.inf
     min_y, max_y = np.inf, -np.inf
-    for selected_cluster, highlight_color in zip(selected_clusters, itertools.cycle(COLOR_CYCLE)):
+    cluster_colors = {c: color for c, color in zip(selected_clusters, itertools.cycle(COLOR_CYCLE))}
+    for selected_cluster in selected_clusters:
         if selected_cluster not in cluster_data["cluster_edge_indices"]:
             continue
         edge_indices = cluster_data["cluster_edge_indices"][selected_cluster]
@@ -290,7 +309,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 x=edges_x,
                 y=edges_y,
                 mode="lines",
-                line=dict(color=highlight_color, width=2),
+                line=dict(color=cluster_colors[selected_cluster], width=2),
                 showlegend=False,
                 legendgroup=selected_cluster,
                 hoverinfo="none",
@@ -321,42 +340,64 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 visible=filtered_clusters[selected_cluster],
                 showlegend=True,
                 legendgroup=selected_cluster,
-                marker=dict(size=20, color=highlight_color, line=dict(color="black", width=1)),
+                marker=dict(size=18, color=cluster_colors[selected_cluster], line=dict(color="black", width=1)),
                 customdata=nodes_customdata,  # Store node_text in customdata
                 hoverinfo='none',
                 hovertemplate=HOVERTEMPLATE if HOVER_ENABLED else None,
                 hoverlabel=dict(
-                    bordercolor=highlight_color  # Border color
+                    bordercolor=cluster_colors[selected_cluster]  # Border color
                 ) if HOVER_ENABLED else None,
                 name=selected_cluster,
             )
         )
+
     if clicked:
-        selected_x = []
-        selected_y = []
-        selected_customdata = [ ]
+
         for selection_data in selection_state:
-            selected_x.append(selection_data["x"])
-            selected_y.append(selection_data["y"])
-            selected_customdata.append(selection_data["customdata"])
-        
-        fig.add_trace(
-            go.Scatter(
-                x=selected_x,
-                y=selected_y,
-                mode="markers" if HOVER_ENABLED else "markers+text",
-                visible=True,
-                textposition="top center",
-                showlegend=False,
-                text=None if HOVER_ENABLED else f"<b>{selected_customdata[0][0]}</b>",
-                marker=dict(size=24, color=SELECT_COLOR, line=dict(color="black", width=1)),
-                customdata=selected_customdata,  # Store node_text in customdata
-                hovertemplate=HOVERTEMPLATE,
-                hoverlabel=dict(
-                    bordercolor=highlight_color  # Border color
+            
+            highlight_color = cluster_colors.get(selection_data["customdata"][3][0], SELECT_COLOR)
+            fig.add_trace(
+                go.Scatter(
+                    x=selection_data["edges_x"],
+                    y=selection_data["edges_y"],
+                    mode="lines",
+                    line=dict(color=SELECT_COLOR, width=3),
+                    showlegend=False,
+                    text=selection_data["weights"],
+                    hovertemplate ='<b>%Weight:</b> {text}',
+                    name="Edges-Selected",
+                )
+            )    
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=[selection_data["x"]],
+                    y=[selection_data["y"]],
+                    mode="markers+text",
+                    visible=True,
+                    textposition="top center",
+                    showlegend=False,
+                    text=f"<b>{text_with_line_breaks(selection_data["customdata"][0])}</b>" if not HOVER_ENABLED else None,
+                    marker=dict(size=22, color=SELECT_COLOR, line=dict(color=highlight_color, width=7)),
+                    customdata=[selection_data["customdata"]],  # Store node_text in customdata
+                    hovertemplate=HOVERTEMPLATE,
+                    hoverlabel=dict(
+                        bordercolor=highlight_color  # Border color
+                    )
                 )
             )
-        )
+
+           
+            # fig.add_annotation(
+            #     x=selection_data["x"],
+            #     y=selection_data["y"]*1.1,
+            #     text=f"<b>{text_with_line_breaks(selection_data["customdata"][0])}</b>",
+            #     showarrow=False,
+            #     font=dict(color="white"),
+            #     bgcolor="rgba(0, 0, 0, 0.6)",  # black with 70% opacity
+            #     xanchor="center",
+            #     yanchor="bottom",
+            # )
 
         
 
@@ -371,14 +412,32 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
         fig.update_layout(xaxis_range=previous_zoom["xaxis_range"], yaxis_range=previous_zoom["yaxis_range"])
         
     elif not clicked or not previous_zoom:
-        x_margin = (max_x - min_x) * 0.1
+        x_margin = (max_x - min_x) * 0.2
         x_min = max([min_x - x_margin, min(fig.data[1].x) - x_margin])
         x_max = min([max_x + x_margin, max(fig.data[1].x) + x_margin])
 
-        y_margin = (max_x - min_x) * 0.1
+        y_margin = (max_x - min_x) * 0.2
         y_min = max([min_y - y_margin, min(fig.data[1].y) - y_margin])
         y_max = min([max_y + y_margin, max(fig.data[1].y) + y_margin])
 
         zoom_info = dict(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
         fig.update_layout(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
+
     return fig, zoom_info
+
+
+def text_with_line_breaks(text, max_line_length=50):
+    words = text.split()
+    lines = []
+    current_line = ""
+    
+    for word in words:
+        if len(current_line + " " + word) <= max_line_length:
+            current_line = current_line + " " + word if current_line else word
+        else:
+            lines.append(current_line)
+            current_line = word
+    if current_line:
+        lines.append(current_line)
+        
+    return "<br>".join(lines)
