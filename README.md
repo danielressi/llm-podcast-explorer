@@ -1,4 +1,4 @@
-# LLM Podcast Explorer
+# FeedPAM - LLM Podcast Explorer
 
 **Explore the Big Picture Behind Every Podcast**
 
@@ -20,7 +20,10 @@ This application uses AI (OpenAI Embeddings and gpt-4o-mini) to analyse the rss 
 * Selected podcasts are available on [https://podcasts-explored.streamlit.app/](https://podcasts-explored.streamlit.app/)
 * Run the application yourself for full flexibility: [Project Setup Guide](#project_setup_guide)
     * **Attention:** OpenAI API Key is needed
-* You can also create an issue to request additional podcasts on the website
+* Checkout selected views on social media: https://www.instagram.com/podcasts.explored/
+* You can also request additional podcasts
+    * create an issue on github
+    * message on https://www.instagram.com/podcasts.explored/
 
 ## Project Setup Guide
 
