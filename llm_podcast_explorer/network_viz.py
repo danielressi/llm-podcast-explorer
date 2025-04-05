@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+import viz_utils
+
 SCALE = 1
 HIGHLIGHT_COLOR = "rgba(214, 39, 40, 1)"
 SELECT_COLOR = "rgba(232, 228, 215, 0.9)"
@@ -193,7 +195,7 @@ def extract_customdata(node):
         ]
 
 
-def create_figure(G, global_positions, clusters, show_grid=False, hover_enabled=True):
+def create_figure(G, global_positions, clusters, show_grid=False, animation_mode=False):
     fig = go.Figure()
     cluster_edges_indices = {c: set() for c in clusters}
     cluster_node_indices = {c: set() for c in clusters}
@@ -257,7 +259,7 @@ def create_figure(G, global_positions, clusters, show_grid=False, hover_enabled=
             marker=dict(size=12, color=DEFAULT_NODE_COLOR, line=dict(color="black", width=1)),
             customdata=metadata_list,  # Store node_text in customdata
             hoverinfo="none",
-            hovertemplate=HOVERTEMPLATE if hover_enabled else None,
+            hovertemplate=HOVERTEMPLATE if not animation_mode else None,
             name="Nodes",
         )
     )
@@ -278,7 +280,7 @@ def create_figure(G, global_positions, clusters, show_grid=False, hover_enabled=
     return fig, cluster_edges_indices, cluster_node_indices
 
 
-def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom, selection_state, hover_enabled=True):
+def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom, selection_state, animation_mode=False):
     if timeline:
         fig.update_xaxes(title_text="Century")
         fig.update_layout(xaxis=dict(showgrid=True, zeroline=True, visible=True),
@@ -343,10 +345,10 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 marker=dict(size=18, color=cluster_colors[selected_cluster], line=dict(color="black", width=1)),
                 customdata=nodes_customdata,  # Store node_text in customdata
                 hoverinfo='none',
-                hovertemplate=HOVERTEMPLATE if hover_enabled else None,
+                hovertemplate=HOVERTEMPLATE if not animation_mode else None,
                 hoverlabel=dict(
                     bordercolor=cluster_colors[selected_cluster]  # Border color
-                ) if hover_enabled else None,
+                ) if not animation_mode else None,
                 name=selected_cluster,
             )
         )
@@ -377,10 +379,10 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                     visible=True,
                     textposition="top center",
                     showlegend=False,
-                    text=f"<b>{text_with_line_breaks(selection_data['customdata'][0])}</b>" if not hover_enabled else None,
+                    text=f"<b>{text_with_line_breaks(selection_data['customdata'][0])}</b>" if animation_mode else None,
                     marker=dict(size=22, color=SELECT_COLOR, line=dict(color=highlight_color, width=7)),
                     customdata=[selection_data["customdata"]],  # Store node_text in customdata
-                    hovertemplate=HOVERTEMPLATE,
+                    hovertemplate=HOVERTEMPLATE if not animation_mode else None,
                     hoverlabel=dict(
                         bordercolor=highlight_color  # Border color
                     )
@@ -390,7 +392,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
            
             # fig.add_annotation(
             #     x=selection_data["x"],
-            #     y=selection_data["y"]*1.1,
+            #     y=selection_data["y"]+0.05,
             #     text=f"<b>{text_with_line_breaks(selection_data["customdata"][0])}</b>",
             #     showarrow=False,
             #     font=dict(color="white"),
@@ -402,7 +404,15 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
         
 
     zoom_info = None
-    if timeline:
+    if clicked and animation_mode and selected_category != "All":
+        fig.update_layout(title=dict(text=f"{selected_category[0]}", 
+                                     font=dict(size=20), 
+                                     automargin=True, 
+                                     yref='paper'))
+        viz_utils.zoom_out_animation(fig, selection_state[0], frame_duration=7000)
+        
+        
+    elif timeline:
         x_min = max([min_x - 5 * SCALE, min(fig.data[1].x) - SCALE])
         x_max = min([max_x + 5 * SCALE, max(fig.data[1].x) + SCALE])
         zoom_info = dict(xaxis_range=[x_min, x_max], yaxis_range=None)
@@ -422,6 +432,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
 
         zoom_info = dict(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
         fig.update_layout(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
+
 
     return fig, zoom_info
 

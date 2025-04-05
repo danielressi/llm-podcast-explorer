@@ -34,7 +34,7 @@ def load_data(url, checkpoint):
     if url:
         llm_api_key = os.environ.get("OPENAI_API_KEY")
         extraction_model = os.environ.get("EXTRACTION_MODEL", "gpt-4o-mini")
-        analyis_model = os.environ.get("ANALYSIS_MODEL", "gpt-4o")
+        analyis_model = os.environ.get("ANALYSIS_MODEL", "gpt-4o-mini")
         analyzer = RSSFeedAnalyzer(rss_url=url, 
                                    llm_api_key=llm_api_key,
                                    extraction_model=extraction_model,
@@ -56,9 +56,9 @@ def load_data(url, checkpoint):
         progress_bar.empty()
 
 @st.cache_data(show_spinner=False)
-def create_network_graph(analysed_episodes, timeline, hover_enabled):
+def create_network_graph(analysed_episodes, timeline, animation_mode):
     G, global_positions, clusters, episode_lookup = build_networkx_graph(analysed_episodes, timeline)
-    fig, cluster_edge_indices, cluster_node_indices = create_figure(G, global_positions, clusters, hover_enabled=hover_enabled)
+    fig, cluster_edge_indices, cluster_node_indices = create_figure(G, global_positions, clusters, animation_mode=animation_mode)
     cluster_data = {
         "clusters": clusters,
         "cluster_edge_indices": cluster_edge_indices,
@@ -196,7 +196,7 @@ def click_reset():
     st.session_state.click_reset = False
     st.session_state.searched_episode = None
 
-def main(analyis_mode):
+def main(analyis_mode, animation_mode=False):
     title = "Podcasts | Explored"
     st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
     set_title_on_top(title)
@@ -291,7 +291,7 @@ def main(analyis_mode):
                 "Timline mode", value=st.session_state.timeline_mode, disabled=False
             )
 
-        base_fig, cluster_data, episode_lookup = create_network_graph(analysed_episodes, timeline, hover_enabled=os.getenv("HOVER_ENABLED", "true").lower() in ('true', '1', 't'))
+        base_fig, cluster_data, episode_lookup = create_network_graph(analysed_episodes, timeline,  animation_mode=animation_mode)
 
         try:
             
@@ -361,7 +361,8 @@ def main(analyis_mode):
                 timeline,
                 st.session_state.click_selection,
                 previous_zoom=st.session_state.zoom_state,
-                selection_state=st.session_state.selection_state 
+                selection_state=st.session_state.selection_state,
+                animation_mode=animation_mode
             )
 
             st.session_state.zoom_state = zoom_state
@@ -372,15 +373,17 @@ def main(analyis_mode):
                 key="plotly_state",
                 selection_mode=("points",),
                 on_select=on_select,
+                autoplay=True,
                 config=dict(scrollZoom=True, 
-                            doubleClick="reset+autosize", 
+                            doubleClick="reset+autosize",
                             doubleClickDelay=1000,
+                            displayModeBar= False if animation_mode else True,
                             toImageButtonOptions={
                                 'format': 'png', # one of png, svg, jpeg, webp
                                 'filename': 'network_view',
                                 'height': 500,
                                 'width': 700,
-                                'scale':6 # Multiply title/legend/axis/canvas sizes by this factor
+                                'scale':3 # Multiply title/legend/axis/canvas sizes by this factor
                             }),
             )
 
@@ -433,6 +436,7 @@ def main(analyis_mode):
 
 if __name__ == "__main__":
     analyis_mode = os.environ.get("ANALYSIS_MODE", DEFAULT_MODE)
+    animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ('true', '1', 't')
     if analyis_mode not in ["static", "active"]:
         raise ValueError(f"Environment variable ANALYSIS_MODE has to be 'static' or 'active', but got {analyis_mode} ")
-    main(analyis_mode)
+    main(analyis_mode, animation_mode)
