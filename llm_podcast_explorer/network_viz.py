@@ -26,7 +26,7 @@ COLOR_CYCLE = [
     f"rgba(188, 189, 34, {COLOR_OPACITY})",  # Yellow-green
     f"rgba(23, 190, 207, {COLOR_OPACITY})",  # Cyan
 ]
-HOVER_ENABLED = True
+
 
 HOVERTEMPLATE = (
     "<b>%{customdata[0]}</b><br>"
@@ -193,7 +193,7 @@ def extract_customdata(node):
         ]
 
 
-def create_figure(G, global_positions, clusters, show_grid=False):
+def create_figure(G, global_positions, clusters, show_grid=False, hover_enabled=True):
     fig = go.Figure()
     cluster_edges_indices = {c: set() for c in clusters}
     cluster_node_indices = {c: set() for c in clusters}
@@ -257,7 +257,7 @@ def create_figure(G, global_positions, clusters, show_grid=False):
             marker=dict(size=12, color=DEFAULT_NODE_COLOR, line=dict(color="black", width=1)),
             customdata=metadata_list,  # Store node_text in customdata
             hoverinfo="none",
-            hovertemplate=HOVERTEMPLATE if HOVER_ENABLED else None,
+            hovertemplate=HOVERTEMPLATE if hover_enabled else None,
             name="Nodes",
         )
     )
@@ -278,7 +278,7 @@ def create_figure(G, global_positions, clusters, show_grid=False):
     return fig, cluster_edges_indices, cluster_node_indices
 
 
-def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom, selection_state):
+def update_figure(fig, selected_category, filtered_clusters, cluster_data, timeline, clicked, previous_zoom, selection_state, hover_enabled=True):
     if timeline:
         fig.update_xaxes(title_text="Century")
         fig.update_layout(xaxis=dict(showgrid=True, zeroline=True, visible=True),
@@ -343,10 +343,10 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                 marker=dict(size=18, color=cluster_colors[selected_cluster], line=dict(color="black", width=1)),
                 customdata=nodes_customdata,  # Store node_text in customdata
                 hoverinfo='none',
-                hovertemplate=HOVERTEMPLATE if HOVER_ENABLED else None,
+                hovertemplate=HOVERTEMPLATE if hover_enabled else None,
                 hoverlabel=dict(
                     bordercolor=cluster_colors[selected_cluster]  # Border color
-                ) if HOVER_ENABLED else None,
+                ) if hover_enabled else None,
                 name=selected_cluster,
             )
         )
@@ -377,7 +377,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                     visible=True,
                     textposition="top center",
                     showlegend=False,
-                    text=f"<b>{text_with_line_breaks(selection_data['customdata'][0])}</b>" if not HOVER_ENABLED else None,
+                    text=f"<b>{text_with_line_breaks(selection_data['customdata'][0])}</b>" if not hover_enabled else None,
                     marker=dict(size=22, color=SELECT_COLOR, line=dict(color=highlight_color, width=7)),
                     customdata=[selection_data["customdata"]],  # Store node_text in customdata
                     hovertemplate=HOVERTEMPLATE,

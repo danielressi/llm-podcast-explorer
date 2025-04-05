@@ -56,9 +56,9 @@ def load_data(url, checkpoint):
         progress_bar.empty()
 
 @st.cache_data(show_spinner=False)
-def create_network_graph(analysed_episodes, timeline):
+def create_network_graph(analysed_episodes, timeline, hover_enabled):
     G, global_positions, clusters, episode_lookup = build_networkx_graph(analysed_episodes, timeline)
-    fig, cluster_edge_indices, cluster_node_indices = create_figure(G, global_positions, clusters)
+    fig, cluster_edge_indices, cluster_node_indices = create_figure(G, global_positions, clusters, hover_enabled=hover_enabled)
     cluster_data = {
         "clusters": clusters,
         "cluster_edge_indices": cluster_edge_indices,
@@ -291,7 +291,7 @@ def main(analyis_mode):
                 "Timline mode", value=st.session_state.timeline_mode, disabled=False
             )
 
-        base_fig, cluster_data, episode_lookup = create_network_graph(analysed_episodes, timeline)
+        base_fig, cluster_data, episode_lookup = create_network_graph(analysed_episodes, timeline, hover_enabled=os.getenv("HOVER_ENABLED", "true").lower() in ('true', '1', 't'))
 
         try:
             
@@ -329,10 +329,12 @@ def main(analyis_mode):
             if st.session_state.searched_episode  is not None:
                 ep_data = episode_lookup[st.session_state.searched_episode]
                 category = ep_data["category"][0] if len(ep_data["category"]) > 0 else None
-                category_clusters = major_categories[category] if category is not None else None
+                category_clusters = major_categories[category] if category is not None else ep_data["clusters"]
+                
                 st.session_state.filtered_clusters = {
                     c: True if c in ep_data["clusters"] else "legendonly" for c in category_clusters
                 }
+
                 st.session_state.selection_state = [ep_data]
                 st.session_state.selected_category = ep_data["category"]
                 st.session_state.click_selection = True
