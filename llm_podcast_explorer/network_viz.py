@@ -409,7 +409,7 @@ def update_figure(fig, selected_category, filtered_clusters, cluster_data, timel
                                      font=dict(size=20), 
                                      automargin=True, 
                                      yref='paper'))
-        viz_utils.zoom_out_animation(fig, selection_state[0], frame_duration=7000)
+        viz_utils.zoom_out_animation(fig, selection_state[0], frame_duration=10000, transition_duration=10000)
         
         
     elif timeline:
