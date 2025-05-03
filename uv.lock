@@ -1294,6 +1294,7 @@ dependencies = [
     { name = "pandas" },
     { name = "plotly" },
     { name = "scikit-learn" },
+    { name = "st-social-media-links" },
     { name = "streamlit" },
     { name = "tqdm" },
     { name = "umap-learn" },
@@ -1331,6 +1332,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "plotly", specifier = ">=6.0.0" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
+    { name = "st-social-media-links", specifier = ">=0.1.5" },
     { name = "streamlit", specifier = ">=1.42.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "umap-learn", specifier = ">=0.5.7" },
@@ -3459,6 +3461,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/18/e9/a00e73a7e8eb620ea030592c7d3a9b66c31bc6b36effdf04f10c7ada8dc1/SQLAlchemy-2.0.37-cp39-cp39-win32.whl", hash = "sha256:03f0528c53ca0b67094c4764523c1451ea15959bbf0a8a8a3096900014db0278", size = 2077561 },
     { url = "https://files.pythonhosted.org/packages/2a/52/f3fff9216b9df07e8142001e638d5ba8c298299a2a9006b9ab3b068fb0f1/SQLAlchemy-2.0.37-cp39-cp39-win_amd64.whl", hash = "sha256:4b12885dc85a2ab2b7d00995bac6d967bffa8594123b02ed21e8eb2205a7584b", size = 2101760 },
     { url = "https://files.pythonhosted.org/packages/3b/36/59cc97c365f2f79ac9f3f51446cae56dfd82c4f2dd98497e6be6de20fb91/SQLAlchemy-2.0.37-py3-none-any.whl", hash = "sha256:a8998bf9f8658bd3839cbc44ddbe982955641863da0c1efe5b00c1ab4f5c16b1", size = 1894113 },
+]
+
+[[package]]
+name = "st-social-media-links"
+version = "0.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3c/56/d467ef58c27e362c5223880366018680c5fce6a6b1b815db2b78f2798f63/st_social_media_links-0.1.5.tar.gz", hash = "sha256:db1dc0199dce923accb037983e572a87a90d089bca5aee96f5b9a377b792d7e8", size = 18761 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/f6/8901ebf1034fdec6d653ad2cb2f8f57b14c1cce12b6ddb4aea897e363709/st_social_media_links-0.1.5-py3-none-any.whl", hash = "sha256:3a7f0f1a87178ed32aeb8bf7901d4843c207329eb44fe72f2071a6e8717516ea", size = 16598 },
 ]
 
 [[package]]
