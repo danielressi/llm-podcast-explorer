@@ -8,6 +8,7 @@ from network_viz import build_networkx_graph, create_figure, update_figure
 from rss_feed_analyzer import AnalyzedEpisodes, RSSFeedAnalyzer
 from rss_feed_loader import InvalidRSSException
 from streamlit.runtime.scriptrunner import StopException
+from st_social_media_links import SocialMediaIcons
 
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
@@ -431,7 +432,18 @@ def main(analyis_mode, animation_mode=False):
                     - For better user experience use a tablet, laptop or computer.
                     """
 
-        st.caption("✨ Leveraging AI to explore content instead of generating it ✨")
+        cap, social = st.columns([3, 1])
+        cap.caption("✨ Leveraging AI to explore content instead of generating it ✨")
+
+        with social:
+            social_media_links = [
+                "https://www.instagram.com/podcasts.explored/",
+            ]
+            social_media_icons = SocialMediaIcons(social_media_links)
+
+            social_media_icons.render(justify_content="end")
+
+            st.write(" ")
 
 
 if __name__ == "__main__":

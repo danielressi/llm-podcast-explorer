@@ -33,6 +33,7 @@ dependencies = [
     "pandas>=2.2.3",
     "plotly>=6.0.0",
     "scikit-learn>=1.6.1",
+    "st-social-media-links>=0.1.5",
     "streamlit>=1.42.0",
     "tqdm>=4.67.1",
     "umap-learn>=0.5.7",
