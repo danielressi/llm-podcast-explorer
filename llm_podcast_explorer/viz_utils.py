@@ -18,7 +18,11 @@ def play_button(frame_duration, transition_duration):
 
 
 def stop_button():
-    return {"label": "Stop", "method": "animate", "args": [[], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}]}
+    return {
+        "label": "Stop",
+        "method": "animate",
+        "args": [[], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}],
+    }
 
 
 def zoom_out_animation(fig, selection_data, delta_init=0.1, frame_duration=40000, transition_duration=40000):

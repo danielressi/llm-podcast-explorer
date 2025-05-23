@@ -417,7 +417,9 @@ def update_figure(
 
     zoom_info = None
     if clicked and animation_mode and selected_category != "All":
-        fig.update_layout(title={"text": f"{selected_category[0]}", "font": {"size": 20}, "automargin": True, "yref": "paper"})
+        fig.update_layout(
+            title={"text": f"{selected_category[0]}", "font": {"size": 20}, "automargin": True, "yref": "paper"}
+        )
         viz_utils.zoom_out_animation(fig, selection_state[0], frame_duration=10000, transition_duration=5000)
 
     elif timeline:

@@ -168,17 +168,17 @@ def set_title_on_top(title):
     )
 
     st.markdown(
-    (
-        f"""
+        (
+            f"""
         <h1 style="text-align: left; margin-top: 0;">
             {title}
             <span style="font-size: 14px; font-weight: normal">by</span>
             <span style="font-size: 14px;">FeedPAM</span>
         </h1>
         """
-    ),
-    unsafe_allow_html=True,
-)
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def reset_search():
@@ -201,6 +201,7 @@ def click_reset():
     st.session_state.click_reset = False
     st.session_state.searched_episode = None
 
+
 def set_podcast_from_query_params(podcasts):
     podcast_query = st.query_params.get("podcast", None)
     if podcast_query is not None:
@@ -211,13 +212,13 @@ def set_podcast_from_query_params(podcasts):
             st.session_state.podcast_query = True
             st.session_state.selected_podcast = podcast_query.replace("-", " ")
 
-def render_intro_text(placeholder=None):
-    #with placeholder.container():
+
+def render_intro_text():
     st.markdown("")
     st.markdown("")
     st.markdown("")
     st.markdown(
-    """
+        """
     #### Explore the Big Picture Behind Every Podcast
 
     Podcasts are full of ideas, connections and themes, but they're not always easy to navigate.
@@ -235,10 +236,11 @@ def render_intro_text(placeholder=None):
     """
     )
 
+
 def show_infos():
     if analyis_mode == "static":
         st.info(
-            "This app is running with static data. " \
+            "This app is running with static data. "
             "Go to [Github](https://github.com/danielressi/llm-podcast-explorer) page for more options"
         )
     with st.sidebar:
@@ -278,20 +280,21 @@ def show_infos():
                 - For better user experience use a tablet, laptop or computer.
                 """
 
+
 def show_social():
+    cap, social = st.columns([3, 1])
+    cap.caption("✨ Leveraging AI to explore content instead of generating it ✨")
 
-        cap, social = st.columns([3, 1])
-        cap.caption("✨ Leveraging AI to explore content instead of generating it ✨")
+    with social:
+        social_media_links = [
+            "https://www.instagram.com/podcasts.explored/",
+        ]
+        social_media_icons = SocialMediaIcons(social_media_links)
 
-        with social:
-            social_media_links = [
-                "https://www.instagram.com/podcasts.explored/",
-            ]
-            social_media_icons = SocialMediaIcons(social_media_links)
+        social_media_icons.render(justify_content="end")
 
-            social_media_icons.render(justify_content="end")
+        st.write(" ")
 
-            st.write(" ")
 
 def update_and_render_fig(base_fig, cluster_data, timeline):
     fig = copy.deepcopy(base_fig)
@@ -333,6 +336,7 @@ def update_and_render_fig(base_fig, cluster_data, timeline):
             },
         )
 
+
 def st_category_selection(major_categories):
     st.session_state.major_categories = major_categories
     major_category_options = sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)
@@ -346,10 +350,11 @@ def st_category_selection(major_categories):
         )
     return selected_category
 
+
 def explore_analysed_episodes(analysed_episodes, timeline, animation_mode):
     base_fig, cluster_data, episode_lookup = create_network_graph(
-            analysed_episodes, timeline, animation_mode=animation_mode
-        )
+        analysed_episodes, timeline, animation_mode=animation_mode
+    )
 
     try:
         major_categories = analysed_episodes["category_2_clusters"]
@@ -388,15 +393,14 @@ def explore_analysed_episodes(analysed_episodes, timeline, animation_mode):
         elif st.session_state.selected_category == ALL_KEY:
             st.session_state.filtered_clusters = {}
         else:
-            st.session_state.filtered_clusters = {
-                c: True for c in major_categories[st.session_state.selected_category]
-            }
+            st.session_state.filtered_clusters = {c: True for c in major_categories[st.session_state.selected_category]}
 
     except StopException:
         st.session_state.click_selection = False
         st.session_state.selected_category = ALL_KEY
 
     update_and_render_fig(base_fig, cluster_data, timeline)
+
 
 def main(analyis_mode, animation_mode=False):
     title = "Podcasts | Explored"
@@ -406,7 +410,6 @@ def main(analyis_mode, animation_mode=False):
     _init_sesion_state()
     podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
     set_podcast_from_query_params(podcasts)
-
 
     if analyis_mode == "active" and not st.session_state.podcast_query:
         reset_disabled = False
@@ -449,17 +452,13 @@ def main(analyis_mode, animation_mode=False):
 
         timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False)
 
-
-
     if st.session_state.selected_podcast is None:
         render_intro_text()
     else:
-
         explore_analysed_episodes(analysed_episodes, timeline, animation_mode)
 
         show_infos()
         show_social()
-
 
 
 if __name__ == "__main__":
