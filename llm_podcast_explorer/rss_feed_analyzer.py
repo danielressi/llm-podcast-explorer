@@ -44,11 +44,12 @@ class ClusterTitlesBatch(BaseModel):
 
 class Mapping(BaseModel):
     mapping: Dict[str, List[str]] = Field(..., description="Mapping")
-                  
-    @field_validator('mapping', mode='before')
+
+    @field_validator("mapping", mode="before")
     @classmethod
     def enforce_list(cls, value: Any) -> str:
         return {k: list(v.values()) if isinstance(v, dict) else list(v) for k, v in value.items()}
+
 
 class MajorCategories(Mapping):
     mapping: Dict[str, List[str]] = Field(
@@ -62,38 +63,39 @@ class ConsolidatedTitles(Mapping):
         description="Mapping of consolidated titles to the corresponding titles that are semantically too similar, duplicates or synonyms",
     )
 
-    
 
 class TextCatalogEntry(BaseModel):
     themes: str = Field(..., description="Themes of the episode")
-    summary: str= Field(..., description="Summaries of the episode")
+    summary: str = Field(..., description="Summaries of the episode")
     tags: str = Field(..., description="Tags of the episode")
 
-    @field_validator('summary', 'themes',"tags", mode='before')
+    @field_validator("summary", "themes", "tags", mode="before")
     @classmethod
     def convert_list_to_str(cls, v: Any) -> str:
         if isinstance(v, list):
             return ",".join(v)
         return v
-    
+
     def to_text(self):
-        return "\n ".join([f"{k.capitalize()}:{v}" for k,v in self.model_dump().items()])
+        return "\n ".join([f"{k.capitalize()}:{v}" for k, v in self.model_dump().items()])
+
 
 def get_rate_limiter(model="gpt-4o-mini"):
     if model == "gpt-4o":
         return InMemoryRateLimiter(
-            requests_per_second=0.5,         # 1 request every 2 seconds
-            check_every_n_seconds=0.1,       # Check every 100 ms
-            max_bucket_size=5                # Allow bursts of 5 requests max
+            requests_per_second=0.5,  # 1 request every 2 seconds
+            check_every_n_seconds=0.1,  # Check every 100 ms
+            max_bucket_size=5,  # Allow bursts of 5 requests max
         )
     elif model == "gpt-4o-mini":
         return InMemoryRateLimiter(
-            requests_per_second=1.0,         # 1 request per second
-            check_every_n_seconds=0.05,      # Check more frequently if you want
-            max_bucket_size=10               # Higher burst capacity
+            requests_per_second=1.0,  # 1 request per second
+            check_every_n_seconds=0.05,  # Check more frequently if you want
+            max_bucket_size=10,  # Higher burst capacity
         )
     else:
         return None
+
 
 class RSSFeedAnalyzer:
     def __init__(
@@ -105,18 +107,22 @@ class RSSFeedAnalyzer:
         analysis_model=None,
         tempature=0.1,
         logger=None,
-        ):
+    ):
         self.rss_loader = RSSFeedLoader(rss_url)
         set_llm_cache(SQLiteCache(database_path=".langchain.db"))
-        self.extraction_llm = ChatOpenAI(model=extraction_model,
-                                         api_key=llm_api_key, 
-                                         temperature=tempature,
-                                         rate_limiter=get_rate_limiter(extraction_model))
+        self.extraction_llm = ChatOpenAI(
+            model=extraction_model,
+            api_key=llm_api_key,
+            temperature=tempature,
+            rate_limiter=get_rate_limiter(extraction_model),
+        )
         analysis_llm_name = analysis_model if analysis_model is not None else extraction_model
-        self.analysis_llm = ChatOpenAI(model=analysis_llm_name,
-                                       api_key=llm_api_key,
-                                       temperature=tempature,
-                                       rate_limiter=get_rate_limiter(analysis_llm_name))
+        self.analysis_llm = ChatOpenAI(
+            model=analysis_llm_name,
+            api_key=llm_api_key,
+            temperature=tempature,
+            rate_limiter=get_rate_limiter(analysis_llm_name),
+        )
         self.embeddings = self._init_embeddings(embedding_model)
         self._noise_title = "Sonstiges" if self.language == "de" else "Other"
 
@@ -210,7 +216,7 @@ class RSSFeedAnalyzer:
         analysis_results = []
         batch_content = []
         batch_metadata = []
-        
+
         for i, episode in enumerate(episode_loader):
             if i > limit:
                 break
@@ -229,20 +235,20 @@ class RSSFeedAnalyzer:
                     batch_metadata.append(episode.model_dump())
 
         if len(batch_content) > 0:
-                response = chain.batch(batch_content)
+            response = chain.batch(batch_content)
 
-                analysed_episodes = [Episode(metadata=m, insights=r) for m, r in zip(batch_metadata, response)]
+            analysed_episodes = [Episode(metadata=m, insights=r) for m, r in zip(batch_metadata, response)]
 
-                analysis_results.extend(analysed_episodes)
+            analysis_results.extend(analysed_episodes)
 
         return AnalyzedEpisodes(episodes=analysis_results)
 
     def _create_episode_text_catalog(self, analysed_episodes):
         text_catalog = {}
         for ep in analysed_episodes:
-            text_catalog[ep.metadata.index] = TextCatalogEntry(themes=ep.insights.inferred_themes, 
-                                                               tags=ep.insights.tags,
-                                                               summary=ep.insights.summary)
+            text_catalog[ep.metadata.index] = TextCatalogEntry(
+                themes=ep.insights.inferred_themes, tags=ep.insights.tags, summary=ep.insights.summary
+            )
 
         return text_catalog
 
@@ -252,21 +258,23 @@ class RSSFeedAnalyzer:
             vectors = normalize(vectors, norm="l2")
         # approximate sklearn implementation if no value specified
         min_samples = kwargs.pop("min_samples", kwargs["min_cluster_size"] - 1)
-        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples, cluster_selection_method='leaf').fit(vectors)
+        c_model = HDBSCAN(**kwargs, prediction_data=True, min_samples=min_samples, cluster_selection_method="leaf").fit(
+            vectors
+        )
         c_labels = c_model.labels_
         c_labels[c_labels >= 0] = c_labels[c_labels >= 0] + cluster_offset
         soft_clusters = all_points_membership_vectors(c_model)
-        
-        clusters_top_3 = pd.DataFrame(np.argsort(soft_clusters, axis=1)[:, ::-1][:,:3])
-        clusters_top_3_proba = pd.DataFrame(np.sort(soft_clusters, axis=1)[:, ::-1][:,:3])
-        
+
+        clusters_top_3 = pd.DataFrame(np.argsort(soft_clusters, axis=1)[:, ::-1][:, :3])
+        clusters_top_3_proba = pd.DataFrame(np.sort(soft_clusters, axis=1)[:, ::-1][:, :3])
+
         clusters_top_3[clusters_top_3_proba < 0.1] = -1
         clusters_top_3[clusters_top_3 != -1] += cluster_offset
-        #clusters_top_3.loc[:, 0] = c_labels
+        # clusters_top_3.loc[:, 0] = c_labels
         return clusters_top_3
 
     def _run_umap(self, vectors, metric, scale=True, **kwargs):
-        reducer = umap.UMAP(n_jobs=-1, metric=metric, init='pca', **kwargs)
+        reducer = umap.UMAP(n_jobs=-1, metric=metric, init="pca", **kwargs)
         embedding_2d = reducer.fit_transform(vectors)
         if scale:
             return embedding_2d - embedding_2d.mean(axis=0)
@@ -275,17 +283,9 @@ class RSSFeedAnalyzer:
 
     def _embedd_cluster_reduce(self, text_catalog, cluster_umap=True, metric="cosine"):
         vectors = np.array(self.embeddings.embed_documents(text_catalog))
-        distances =pairwise_distances(vectors, metric=metric)
-        embedding_5d = self._run_umap(vectors, 
-                                      metric=metric, 
-                                      n_neighbors=10, 
-                                      min_dist=0.05,
-                                      n_components=5)
-        embedding_2d = self._run_umap(vectors, 
-                                      metric=metric, 
-                                      n_neighbors=10, 
-                                      min_dist=0.05,
-                                      n_components=2)
+        distances = pairwise_distances(vectors, metric=metric)
+        embedding_5d = self._run_umap(vectors, metric=metric, n_neighbors=10, min_dist=0.05, n_components=5)
+        embedding_2d = self._run_umap(vectors, metric=metric, n_neighbors=10, min_dist=0.05, n_components=2)
         clusters_df = (
             pd.DataFrame({"text_catalog": text_catalog}, index=range(len(text_catalog)))
             .assign(is_extra=False)
@@ -304,30 +304,29 @@ class RSSFeedAnalyzer:
             min_cluster_size=initial_min_cluster_size,
             max_cluster_size=max_cluster_size,
             min_samples=min_samples,
-            metric=metric
+            metric=metric,
         )
         cluster_top_3.set_index(clusters_df.index, inplace=True)
-        
+
         clusters_df["cluster"] = cluster_top_3[0]
-        
 
         unmatched = clusters_df.query("cluster == -1")
         max_iter = 2
         i = 0
         n_unmatched_before = len(unmatched)
-        while (len(unmatched) / len(clusters_df)) > 0.15 and int(initial_min_cluster_size / ((i+1)*2)) >= 2:
+        while (len(unmatched) / len(clusters_df)) > 0.15 and int(initial_min_cluster_size / ((i + 1) * 2)) >= 2:
             if i == max_iter:
                 print(f"Max iter for clustering reached. {len(unmatched)} points left without cluster")
                 break
             extra_clusters = self._predict_clusters(
                 vectors=cluster_data[unmatched.index.to_numpy()],
                 cluster_offset=cluster_top_3.apply(max).max() + 1,
-                max_cluster_size=max(10, int(max_cluster_size*0.1)),
-                min_cluster_size=max(2, int(initial_min_cluster_size / ((i+1)*2))),
+                max_cluster_size=max(10, int(max_cluster_size * 0.1)),
+                min_cluster_size=max(2, int(initial_min_cluster_size / ((i + 1) * 2))),
             )
             extra_clusters.set_index(unmatched.index, inplace=True)
             clusters_df.loc[unmatched.index, "cluster"] = extra_clusters[0].values
-            cluster_top_3.loc[unmatched.index, 0] =  extra_clusters[0]
+            cluster_top_3.loc[unmatched.index, 0] = extra_clusters[0]
             clusters_df.loc[unmatched.index, "is_extra"] = True
             clusters_df.loc[unmatched.index, "cluster_attempt"] = i + 1
 
@@ -397,7 +396,6 @@ class RSSFeedAnalyzer:
 
         return batches, cluster_batches
 
-
     """
         Create an authentic, engaging, and concise title (max. 5 words) in {language} for a group of related documents. 
         Your title must accurately reflect the documents' main themes, convey their essence clearly, and match their intended tone (factual, humorous, dramatic, etc.). 
@@ -418,6 +416,7 @@ class RSSFeedAnalyzer:
         Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
         Example Output: ['The Hidden Designs That Shape Our World']
     """
+
     def _generate_cluster_titles(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=ClusterTitlesBatch)
         prompt_template = ChatPromptTemplate([
@@ -452,11 +451,15 @@ class RSSFeedAnalyzer:
 
         retry_parser = RetryOutputParser.from_llm(parser=parser, llm=self.analysis_llm, max_retries=2)
 
-        chain = RunnableParallel(completion=prompt_template | self.analysis_llm, prompt_value=prompt_template) | RunnableLambda(
+        chain = RunnableParallel(
+            completion=prompt_template | self.analysis_llm, prompt_value=prompt_template
+        ) | RunnableLambda(
             lambda x: retry_parser.parse_with_prompt(completion=x["completion"].content, prompt_value=x["prompt_value"])
         )
 
-        batched_text_catalog, batched_clusters = self._create_clustered_batches(clusters_df, key="text_catalog", batch_size=8000)
+        batched_text_catalog, batched_clusters = self._create_clustered_batches(
+            clusters_df, key="text_catalog", batch_size=8000
+        )
         batched_prompts = []
 
         for batch in batched_text_catalog:
@@ -544,7 +547,7 @@ class RSSFeedAnalyzer:
             if len(r_titles) > 0:
                 clusters_df.loc[clusters_df["title"].isin(r_titles), "consolidated_title"] = c_title
 
-        assert  (clusters_df.groupby("cluster")["consolidated_title"].nunique() == 1).all()
+        assert (clusters_df.groupby("cluster")["consolidated_title"].nunique() == 1).all()
         clusters_unique_df = clusters_df.groupby("cluster")["consolidated_title"].first()
         clusters_unique_df.loc[-1] = self._noise_title
 
@@ -567,7 +570,6 @@ class RSSFeedAnalyzer:
             consolidated_episodes.append(ep_copy)
 
         return AnalyzedEpisodes(episodes=consolidated_episodes), clusters_df
-    
 
     def _get_major_categories(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=MajorCategories)
@@ -639,16 +641,15 @@ class RSSFeedAnalyzer:
     def run(self, limit=1000):
         raise NotImplementedError("todo: adapt run without streamlit")
 
-
     def run_with_streamlit_progress(self, progress_bar, limit=1000):
         """
         @progress_bar: st.progress widget
         """
         progress_bar.progress(
-            20, f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.extraction_llm.model_name}..."
+            20,
+            f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.extraction_llm.model_name}...",
         )
         analysed_episodes = self.analyze_feed(limit)
-
 
         progress_bar.progress(50, "Clustering episode summaries ...")
         text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
@@ -656,14 +657,10 @@ class RSSFeedAnalyzer:
         progress_bar.progress(70, f"Creating cluster titles with {self.analysis_llm.model_name}...")
         clustered_episodes, titled_clusters = self._generate_cluster_titles(analysed_episodes, summary_clusters)
         progress_bar.progress(80, f"Consolidating clusters with {self.analysis_llm.model_name}...")
-        consolidated_episodes, consolidated_clusters = self._consolidate_clusters(
-            clustered_episodes, titled_clusters
-        )
+        consolidated_episodes, consolidated_clusters = self._consolidate_clusters(clustered_episodes, titled_clusters)
 
         progress_bar.progress(90, f"Generating major categories with {self.analysis_llm.model_name}...")
-        finalized_episodes, final_clusters = self._get_major_categories(
-            consolidated_episodes, consolidated_clusters
-        )
+        finalized_episodes, final_clusters = self._get_major_categories(consolidated_episodes, consolidated_clusters)
         finalized_episodes.distance_map = distance_map
         finalized_episodes.extra["consolidation_map"] = (
             final_clusters.groupby("consolidated_title")["title"].apply(lambda x: list(set(x))).to_dict()

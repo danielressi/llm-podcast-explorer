@@ -16,11 +16,12 @@ EPISODE_LIMIT = 1000
 DEFAULT_MODE = "active"
 
 
-PODCAST_QUERY_LOOKUP = {"GAG": "Geschichten aus der Geschichte",
-                        "99pi": "99% Invisible",
-                        "Verbrechen": "Verbrechen",
-                        "Atlas-Obscura": "The Atlas Obscura Podcast"
-                        }
+PODCAST_QUERY_LOOKUP = {
+    "GAG": "Geschichten aus der Geschichte",
+    "99pi": "99% Invisible",
+    "Verbrechen": "Verbrechen",
+    "Atlas-Obscura": "The Atlas Obscura Podcast",
+}
 
 
 @st.cache_data(show_spinner=False)
@@ -36,10 +37,9 @@ def load_data(url, checkpoint):
         llm_api_key = os.environ.get("OPENAI_API_KEY")
         extraction_model = os.environ.get("EXTRACTION_MODEL", "gpt-4o-mini")
         analyis_model = os.environ.get("ANALYSIS_MODEL", "gpt-4o-mini")
-        analyzer = RSSFeedAnalyzer(rss_url=url, 
-                                   llm_api_key=llm_api_key,
-                                   extraction_model=extraction_model,
-                                   analysis_model=analyis_model)
+        analyzer = RSSFeedAnalyzer(
+            rss_url=url, llm_api_key=llm_api_key, extraction_model=extraction_model, analysis_model=analyis_model
+        )
 
         checkpoint_path = CHECKPOINT_PATH / f"{analyzer.title}.json"
         if checkpoint and checkpoint_path.exists():
@@ -56,10 +56,13 @@ def load_data(url, checkpoint):
         progress_bar.progress(90, "No data found ..")
         progress_bar.empty()
 
+
 @st.cache_data(show_spinner=False)
 def create_network_graph(analysed_episodes, timeline, animation_mode):
     G, global_positions, clusters, episode_lookup = build_networkx_graph(analysed_episodes, timeline)
-    fig, cluster_edge_indices, cluster_node_indices = create_figure(G, global_positions, clusters, animation_mode=animation_mode)
+    fig, cluster_edge_indices, cluster_node_indices = create_figure(
+        G, global_positions, clusters, animation_mode=animation_mode
+    )
     cluster_data = {
         "clusters": clusters,
         "cluster_edge_indices": cluster_edge_indices,
@@ -70,6 +73,7 @@ def create_network_graph(analysed_episodes, timeline, animation_mode):
 
 def pretty_key(v):
     return str(v).replace("_", " ").capitalize()
+
 
 def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> str:
     """
@@ -82,11 +86,10 @@ def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> s
         Markdown formatted string
     """
     episode_title = display_data.pop("title")
-    summary =  display_data.pop("summary")
+    summary = display_data.pop("summary")
     url = display_data.pop("link")
     description = display_data.pop("description", "Coming Soon!")
-    
-    
+
     st.write(f"### {episode_title} ")
     st.write(f"{summary}")
 
@@ -98,8 +101,8 @@ def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> s
     markdown = []
     for key, value in display_data.items():
         # Add header for the key
-        
-        markdown.append(f"#### {pretty_key(key)}:  \n") 
+
+        markdown.append(f"#### {pretty_key(key)}:  \n")
 
         # Handle list values
         if isinstance(value, list):
@@ -111,10 +114,11 @@ def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> s
         markdown.append("\n")  # Add spacing between sections
 
     st.write("\n".join(markdown))
-        
+
     with st.popover("Full Description"):
-        #st.markdown(f'<div style="max-height:400px; overflow:auto;">{description}</div>', unsafe_allow_html=True)
+        # st.markdown(f'<div style="max-height:400px; overflow:auto;">{description}</div>', unsafe_allow_html=True)
         st.markdown(description)
+
 
 def on_select():
     if "plotly_state" in st.session_state:
@@ -125,11 +129,11 @@ def on_select():
         else:
             st.session_state.searched_episode = None
             st.session_state.click_selection = False
-            #st.session_state.click_reset = True
+            # st.session_state.click_reset = True
 
 
 def _init_sesion_state():
-     # Initialize session state variables
+    # Initialize session state variables
     if "timeline_mode" not in st.session_state:
         st.session_state.timeline_mode = False
     if "podcast_query" not in st.session_state:
@@ -156,9 +160,9 @@ def _init_sesion_state():
         st.session_state.searched_episode = None
 
 
-
 def set_title_on_top(title):
-    st.markdown("""
+    st.markdown(
+        """
         <style>
                /* Remove blank space at top and bottom */ 
                .block-container {
@@ -167,22 +171,26 @@ def set_title_on_top(title):
                 }
 
         </style>
-        """, unsafe_allow_html=True)
-    
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown(
         f"""
         <h1 style="text-align: left; margin-top: 0;">
             {title} <span style="font-size: 14px;font-weight: normal">by</span> <span style="font-size: 14px;">FeedPAM</span>
         </h1>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
+
 
 def reset_search():
     st.session_state.searched_episode = None
     st.session_state.selection_state = None
     st.session_state.episode_selection = None
     st.session_state.checkpoint = True
+
 
 def reset_category_selection():
     st.session_state.category_selection = ALL_KEY
@@ -192,10 +200,11 @@ def reset_category_selection():
 
 
 def click_reset():
-    """ User clicked on reset view or double clicked graph"""
+    """User clicked on reset view or double clicked graph"""
     st.session_state.selected_category = ALL_KEY
     st.session_state.click_reset = False
     st.session_state.searched_episode = None
+
 
 def main(analyis_mode, animation_mode=False):
     title = "Podcasts | Explored"
@@ -213,9 +222,6 @@ def main(analyis_mode, animation_mode=False):
             st.session_state.podcast_query = True
             st.session_state.selected_podcast = podcast_query.replace("-", " ")
 
-        
-
-
     if analyis_mode == "active" and not st.session_state.podcast_query:
         reset_disabled = False
         rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
@@ -231,7 +237,6 @@ def main(analyis_mode, animation_mode=False):
                 st.error(e)
                 st.session_state.selected_podcast = None
     else:
-        
         reset_disabled = True
         podcast_options = sorted(podcasts.keys())
         if st.session_state.podcast_query:
@@ -239,8 +244,7 @@ def main(analyis_mode, animation_mode=False):
         else:
             index = None
         selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=index)
-        
-        
+
         st.session_state.selected_podcast = selected_podcast
 
         # st.session_state.rss_url
@@ -248,7 +252,7 @@ def main(analyis_mode, animation_mode=False):
             analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
 
     with st.sidebar:
-        col1, col2 = st.columns([1,1])
+        col1, col2 = st.columns([1, 1])
         with col1:
             reset = st.button("Rerun analysis", disabled=reset_disabled)
             if reset and st.session_state.selected_podcast is not None:
@@ -260,7 +264,6 @@ def main(analyis_mode, animation_mode=False):
             if not st.session_state.click_reset:
                 st.session_state.click_reset = reset_view
 
-    
     select_box_placeholder = st.empty()
     placeholder = st.empty()
 
@@ -288,37 +291,36 @@ def main(analyis_mode, animation_mode=False):
             )
     else:
         with st.sidebar:
-            timeline = st.toggle(
-                "Timline mode", value=st.session_state.timeline_mode, disabled=False
-            )
+            timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False)
 
-        base_fig, cluster_data, episode_lookup = create_network_graph(analysed_episodes, timeline,  animation_mode=animation_mode)
+        base_fig, cluster_data, episode_lookup = create_network_graph(
+            analysed_episodes, timeline, animation_mode=animation_mode
+        )
 
         try:
-            
             major_categories = analysed_episodes["category_2_clusters"]
             st.session_state.major_categories = major_categories
-            category_options = [ALL_KEY] + list(sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)) #list(major_categories.keys())
+            category_options = [ALL_KEY] + list(
+                sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)
+            )  # list(major_categories.keys())
             with select_box_placeholder.container():
                 selected_category = st.selectbox(
-                    "Select a category:", 
-                    options=category_options, 
-                    key="category_selection", 
-                    index=0, 
-                    on_change=reset_search
+                    "Select a category:",
+                    options=category_options,
+                    key="category_selection",
+                    index=0,
+                    on_change=reset_search,
                 )
 
             with st.sidebar:
                 search_episode = st.selectbox(
-                    "Search episodes", 
-                    options=episode_lookup.keys(), 
-                    key="episode_selection", 
+                    "Search episodes",
+                    options=episode_lookup.keys(),
+                    key="episode_selection",
                     on_change=reset_category_selection,
                     index=None,
-                    placeholder="Search"
+                    placeholder="Search",
                 )
-            
-            
 
             # Reset on double click
             if st.session_state.click_reset:
@@ -327,11 +329,11 @@ def main(analyis_mode, animation_mode=False):
                 st.session_state.selected_category = selected_category
                 st.session_state.searched_episode = search_episode
 
-            if st.session_state.searched_episode  is not None:
+            if st.session_state.searched_episode is not None:
                 ep_data = episode_lookup[st.session_state.searched_episode]
                 category = ep_data["category"][0] if len(ep_data["category"]) > 0 else None
                 category_clusters = major_categories[category] if category is not None else ep_data["clusters"]
-                
+
                 st.session_state.filtered_clusters = {
                     c: True if c in ep_data["clusters"] else "legendonly" for c in category_clusters
                 }
@@ -363,7 +365,7 @@ def main(analyis_mode, animation_mode=False):
                 st.session_state.click_selection,
                 previous_zoom=st.session_state.zoom_state,
                 selection_state=st.session_state.selection_state,
-                animation_mode=animation_mode
+                animation_mode=animation_mode,
             )
 
             st.session_state.zoom_state = zoom_state
@@ -375,17 +377,19 @@ def main(analyis_mode, animation_mode=False):
                 selection_mode=("points",),
                 on_select=on_select,
                 autoplay=True,
-                config=dict(scrollZoom=True, 
-                            doubleClick="reset+autosize",
-                            doubleClickDelay=1000,
-                            displayModeBar= False if animation_mode else True,
-                            toImageButtonOptions={
-                                'format': 'png', # one of png, svg, jpeg, webp
-                                'filename': 'network_view',
-                                'height': 500,
-                                'width': 700,
-                                'scale':3 # Multiply title/legend/axis/canvas sizes by this factor
-                            }),
+                config=dict(
+                    scrollZoom=True,
+                    doubleClick="reset+autosize",
+                    doubleClickDelay=1000,
+                    displayModeBar=False if animation_mode else True,
+                    toImageButtonOptions={
+                        "format": "png",  # one of png, svg, jpeg, webp
+                        "filename": "network_view",
+                        "height": 500,
+                        "width": 700,
+                        "scale": 3,  # Multiply title/legend/axis/canvas sizes by this factor
+                    },
+                ),
             )
 
         if analyis_mode == "static":
@@ -400,14 +404,12 @@ def main(analyis_mode, animation_mode=False):
                 if st.session_state.click_selection and st.session_state.selection_state:
                     display_data = st.session_state.selection_state[0]["customdata"][-1]
                     format_dict_to_markdown(display_data)
-                    
-                    
 
                     st.session_state.click_selection = False
 
                 elif len(st.session_state.filtered_clusters) == 0:
                     st.write(
-                    """
+                        """
                     **Tips:**
                     - Select a category to start exploring the themes and topics of the podcast
                     - Each point represents an episode and similar episodes are visualised closer to each other.
@@ -418,7 +420,7 @@ def main(analyis_mode, animation_mode=False):
                     - For better user experience use a tablet, laptop or computer
                     """
                     )
-                    
+
                 else:
                     """
                     **Tips:**
@@ -448,7 +450,7 @@ def main(analyis_mode, animation_mode=False):
 
 if __name__ == "__main__":
     analyis_mode = os.environ.get("ANALYSIS_MODE", DEFAULT_MODE)
-    animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ('true', '1', 't')
+    animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ("true", "1", "t")
     if analyis_mode not in ["static", "active"]:
         raise ValueError(f"Environment variable ANALYSIS_MODE has to be 'static' or 'active', but got {analyis_mode} ")
     main(analyis_mode, animation_mode)
