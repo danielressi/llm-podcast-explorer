@@ -5,7 +5,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-
 import viz_utils
 
 SCALE = 1
@@ -55,18 +54,18 @@ def extract_episode_selection_data(G, positions, episode):
         edges_x.extend([xa, xb])
         edges_y.extend([ya, yb])
         edge_data = G.get_edge_data(ep_a, ep_b)
-        weights.append(edge_data["weight"] if "weight" in edge_data else 0)
+        weights.append(edge_data.get("weight", 0))
 
-    return dict(
-        x=x,
-        y=y,
-        clusters=data["cluster"],
-        customdata=extract_customdata(data),
-        category=data["category"],
-        edges_x=edges_x,
-        edges_y=edges_y,
-        weights=weights,
-    )
+    return {
+        "x": x,
+        "y": y,
+        "clusters": data["cluster"],
+        "customdata": extract_customdata(data),
+        "category": data["category"],
+        "edges_x": edges_x,
+        "edges_y": edges_y,
+        "weights": weights,
+    }
 
 
 def build_episode_lookup(G, global_positions, episodes):
@@ -98,19 +97,19 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
             subtitle=ep["metadata"]["subtitle"],
             century=century,
             embedding=ep["clusters"]["embeddings"],
-            on_click=dict(
-                title=ep["metadata"]["title"],
-                summary=ep["insights"]["summary"],
-                tags=ep["insights"]["tags"],
-                themes=ep["insights"]["inferred_themes"],
-                description=ep["metadata"]["description"] if "description" in ep["metadata"] else None,
+            on_click={
+                "title": ep["metadata"]["title"],
+                "summary": ep["insights"]["summary"],
+                "tags": ep["insights"]["tags"],
+                "themes": ep["insights"]["inferred_themes"],
+                "description": ep["metadata"].get("description", None),
                 # clusters=", ".join(cluster_titles),
                 # clusters_raw=ep["clusters"]["titles"],
                 # cluster_attempt=ep["clusters"]["attempt"],
-                referenced_episodes=ep["insights"]["referenced_episodes_id"],
-                link=ep["metadata"]["link"],
+                "referenced_episodes": ep["insights"]["referenced_episodes_id"],
+                "link": ep["metadata"]["link"],
                 # year=f"{ep['insights']['topic_year']} ({ep['insights']['topic_century']} Century)",
-            ),
+            },
             cluster=show_titles,
             category=category,
         )
@@ -228,7 +227,7 @@ def create_figure(G, global_positions, clusters, show_grid=False, animation_mode
             x=edge_x,
             y=edge_y,
             mode="lines",
-            line=dict(color=BACKGROUND_COLOR, width=1),
+            line={"color": BACKGROUND_COLOR, "width": 1},
             hoverinfo="none",
             visible=True,
             showlegend=False,
@@ -260,7 +259,7 @@ def create_figure(G, global_positions, clusters, show_grid=False, animation_mode
             mode="markers",
             visible=True,
             showlegend=False,
-            marker=dict(size=12, color=DEFAULT_NODE_COLOR, line=dict(color="black", width=1)),
+            marker={"size": 12, "color": DEFAULT_NODE_COLOR, "line": {"color": "black", "width": 1}},
             customdata=metadata_list,  # Store node_text in customdata
             hoverinfo="none",
             hovertemplate=HOVERTEMPLATE if not animation_mode else None,
@@ -271,12 +270,12 @@ def create_figure(G, global_positions, clusters, show_grid=False, animation_mode
     fig.update_layout(
         # title_font=dict(size=20, color="#333"),  # Dark gray for a clean look
         # showlegend=True,
-        xaxis=dict(showgrid=show_grid, zeroline=show_grid, visible=show_grid),
-        yaxis=dict(showgrid=show_grid, zeroline=show_grid, visible=show_grid),
-        margin=dict(l=20, r=20, t=10, b=10),
+        xaxis={"showgrid": show_grid, "zeroline": show_grid, "visible": show_grid},
+        yaxis={"showgrid": show_grid, "zeroline": show_grid, "visible": show_grid},
+        margin={"l": 20, "r": 20, "t": 10, "b": 10},
         # plot_bgcolor="#F0F2F6",  # Matches Streamlit's default background
         # paper_bgcolor="#F0F2F6",  # Ensures smooth blending
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="left", x=0.0),
+        legend={"orientation": "h", "yanchor": "bottom", "y": -0.2, "xanchor": "left", "x": 0.0},
         uirevision=True,
         uniformtext_minsize=36,
     )
@@ -298,8 +297,8 @@ def update_figure(
     if timeline:
         fig.update_xaxes(title_text="Century")
         fig.update_layout(
-            xaxis=dict(showgrid=True, zeroline=True, visible=True),
-            legend=dict(y=-0.5),
+            xaxis={"showgrid": True, "zeroline": True, "visible": True},
+            legend={"y": -0.5},
         )
 
     if (selected_category == "All") and not clicked:
@@ -310,7 +309,7 @@ def update_figure(
     # fig.update_traces(hovertemplate=None)
     min_x, max_x = np.inf, -np.inf
     min_y, max_y = np.inf, -np.inf
-    cluster_colors = {c: color for c, color in zip(selected_clusters, itertools.cycle(COLOR_CYCLE))}
+    cluster_colors = dict(zip(selected_clusters, itertools.cycle(COLOR_CYCLE)))
     for selected_cluster in selected_clusters:
         if selected_cluster not in cluster_data["cluster_edge_indices"]:
             continue
@@ -327,7 +326,7 @@ def update_figure(
                 x=edges_x,
                 y=edges_y,
                 mode="lines",
-                line=dict(color=cluster_colors[selected_cluster], width=2),
+                line={"color": cluster_colors[selected_cluster], "width": 2},
                 showlegend=False,
                 legendgroup=selected_cluster,
                 hoverinfo="none",
@@ -358,13 +357,13 @@ def update_figure(
                 visible=filtered_clusters[selected_cluster],
                 showlegend=True,
                 legendgroup=selected_cluster,
-                marker=dict(size=18, color=cluster_colors[selected_cluster], line=dict(color="black", width=1)),
+                marker={"size": 18, "color": cluster_colors[selected_cluster], "line": {"color": "black", "width": 1}},
                 customdata=nodes_customdata,  # Store node_text in customdata
                 hoverinfo="none",
                 hovertemplate=HOVERTEMPLATE if not animation_mode else None,
-                hoverlabel=dict(
-                    bordercolor=cluster_colors[selected_cluster]  # Border color
-                )
+                hoverlabel={
+                    "bordercolor": cluster_colors[selected_cluster]  # Border color
+                }
                 if not animation_mode
                 else None,
                 name=selected_cluster,
@@ -379,7 +378,7 @@ def update_figure(
                     x=selection_data["edges_x"],
                     y=selection_data["edges_y"],
                     mode="lines",
-                    line=dict(color=SELECT_COLOR, width=3),
+                    line={"color": SELECT_COLOR, "width": 3},
                     showlegend=False,
                     text=selection_data["weights"],
                     hovertemplate="<b>%Weight:</b> {text}",
@@ -396,12 +395,12 @@ def update_figure(
                     textposition="top center",
                     showlegend=False,
                     text=f"<b>{text_with_line_breaks(selection_data['customdata'][0])}</b>" if animation_mode else None,
-                    marker=dict(size=22, color=SELECT_COLOR, line=dict(color=highlight_color, width=7)),
+                    marker={"size": 22, "color": SELECT_COLOR, "line": {"color": highlight_color, "width": 7}},
                     customdata=[selection_data["customdata"]],  # Store node_text in customdata
                     hovertemplate=HOVERTEMPLATE if not animation_mode else None,
-                    hoverlabel=dict(
-                        bordercolor=highlight_color  # Border color
-                    ),
+                    hoverlabel={
+                        "bordercolor": highlight_color  # Border color
+                    },
                 )
             )
 
@@ -418,13 +417,13 @@ def update_figure(
 
     zoom_info = None
     if clicked and animation_mode and selected_category != "All":
-        fig.update_layout(title=dict(text=f"{selected_category[0]}", font=dict(size=20), automargin=True, yref="paper"))
+        fig.update_layout(title={"text": f"{selected_category[0]}", "font": {"size": 20}, "automargin": True, "yref": "paper"})
         viz_utils.zoom_out_animation(fig, selection_state[0], frame_duration=10000, transition_duration=5000)
 
     elif timeline:
         x_min = max([min_x - 5 * SCALE, min(fig.data[1].x) - SCALE])
         x_max = min([max_x + 5 * SCALE, max(fig.data[1].x) + SCALE])
-        zoom_info = dict(xaxis_range=[x_min, x_max], yaxis_range=None)
+        zoom_info = {"xaxis_range": [x_min, x_max], "yaxis_range": None}
         fig.update_xaxes(title_text="Century", range=[x_min, x_max])
 
     elif clicked and previous_zoom:
@@ -439,7 +438,7 @@ def update_figure(
         y_min = max([min_y - y_margin, min(fig.data[1].y) - y_margin])
         y_max = min([max_y + y_margin, max(fig.data[1].y) + y_margin])
 
-        zoom_info = dict(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
+        zoom_info = {"xaxis_range": [x_min, x_max], "yaxis_range": [y_min, y_max]}
         fig.update_layout(xaxis_range=[x_min, x_max], yaxis_range=[y_min, y_max])
 
     return fig, zoom_info

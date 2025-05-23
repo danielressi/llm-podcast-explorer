@@ -2,11 +2,12 @@ import itertools
 import json
 import logging
 import os
-from typing import Dict, List, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import umap
+from episodes_model import AnalyzedEpisodes, ClusteredEpisodeInsights, Episode, EpisodeInsights
 from hdbscan import HDBSCAN as HDBSCAN
 from hdbscan.prediction import all_points_membership_vectors
 from langchain.embeddings import CacheBackedEmbeddings
@@ -16,34 +17,31 @@ from langchain_community.cache import SQLiteCache
 from langchain_core.globals import set_llm_cache
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_core.rate_limiters import InMemoryRateLimiter
-
 from pydantic import BaseModel, Field, RootModel, field_validator
 from rss_feed_loader import RSSFeedLoader
 from sklearn.metrics import pairwise_distances
-from sklearn.preprocessing import StandardScaler, normalize
-
-from episodes_model import AnalyzedEpisodes, Episode, EpisodeInsights, ClusteredEpisodeInsights
+from sklearn.preprocessing import normalize
 
 COSINE_DISTANCE_THRESHOLD = 0.5
 
 
 class Mapping(RootModel):
-    root: Dict[str, str]
+    root: dict[str, str]
 
 
 class SimpleList(RootModel):
-    root: List[str]
+    root: list[str]
 
 
 class ClusterTitlesBatch(BaseModel):
-    items: List[str] = Field(..., description="Batch of cluster titles")
+    items: list[str] = Field(..., description="Batch of cluster titles")
 
 
 class Mapping(BaseModel):
-    mapping: Dict[str, List[str]] = Field(..., description="Mapping")
+    mapping: dict[str, list[str]] = Field(..., description="Mapping")
 
     @field_validator("mapping", mode="before")
     @classmethod
@@ -52,13 +50,13 @@ class Mapping(BaseModel):
 
 
 class MajorCategories(Mapping):
-    mapping: Dict[str, List[str]] = Field(
+    mapping: dict[str, list[str]] = Field(
         ..., description="Mapping from identified major categories to all the titles that belong to the major category."
     )
 
 
 class ConsolidatedTitles(Mapping):
-    mapping: Dict[str, List[str]] = Field(
+    mapping: dict[str, list[str]] = Field(
         ...,
         description="Mapping of consolidated titles to the corresponding titles that are semantically too similar, duplicates or synonyms",
     )
@@ -174,21 +172,21 @@ class RSSFeedAnalyzer:
                 """
             You are an information extraction and generalisation specialist for a podcast called {podcast}.
             This is the description of the podcast to provide more context: {podcast_description}
-            
+
             Your task:
-            
+
             Given the description of an episode you have the following tasks:
-                - give a very short and poignant summary of the episode in no more than 15 words. Cut to the chase! 
-                - extract up to {tag_limit} relevant tags 
+                - give a very short and poignant summary of the episode in no more than 15 words. Cut to the chase!
+                - extract up to {tag_limit} relevant tags
                 - suggest up to {theme_limit} fitting themes or topic areas that can be used to describe and generalize the topic of the episode.
                 - extract year and century of the topic. If not provided in description make a best guess based on the topic.
-                - check if there are references to other episodes (episode_id <-> referenced_episode_ids) 
-            
+                - check if there are references to other episodes (episode_id <-> referenced_episode_ids)
+
             The goal is to analyse and cluster all of the episodes in a later stage, so the themes and tags should be consistent across all episodes.
             Constraints:
                 - The tags and themes must be in the same language as the input
                 - Output your answer as JSON that matches the given schema: {format_instructions}.
-            
+
             """,
             ),
             ("user", "Episode Title: {title}\n\n Episode Content: {episode_content}"),
@@ -397,14 +395,14 @@ class RSSFeedAnalyzer:
         return batches, cluster_batches
 
     """
-        Create an authentic, engaging, and concise title (max. 5 words) in {language} for a group of related documents. 
-        Your title must accurately reflect the documents' main themes, convey their essence clearly, and match their intended tone (factual, humorous, dramatic, etc.). 
+        Create an authentic, engaging, and concise title (max. 5 words) in {language} for a group of related documents.
+        Your title must accurately reflect the documents' main themes, convey their essence clearly, and match their intended tone (factual, humorous, dramatic, etc.).
         Prioritize coherence and natural expression.
 
         You are an expert in gerneralizing semantic content.
-        Your task is to provide a poignant, authentic and concise title in {language} for a group of related documents. 
-        The title must accuractely capture the essence of the documents and the mentioned themes, while also being engaging.  
-        
+        Your task is to provide a poignant, authentic and concise title in {language} for a group of related documents.
+        The title must accuractely capture the essence of the documents and the mentioned themes, while also being engaging.
+
         Consider the following guidelines:
             - Generalsation: Capture the bigger picture behind the group of documents.
             - Focus on themes: The documents contain themes. The title should reflect these themes.
@@ -412,7 +410,7 @@ class RSSFeedAnalyzer:
             - Targeted: Depending on the content the titles should be factual, funny, dramatic etc.
             - Conciseness: Keep the title concise ideally no longer than 5 words.
             - Coherence: The title must be meaningful and must not sound artificial.
-        
+
         Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
         Example Output: ['The Hidden Designs That Shape Our World']
     """
@@ -429,19 +427,19 @@ class RSSFeedAnalyzer:
                 Follow these instructions strictly:
 
                 - Accurate: The title must represent the core themes that are listed in the documents.
-                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents. 
+                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents.
                 - Broad: Do not include specific details in the title that are only applicable to a subset of the documents. Do not add specific epochs, years or places to the title.
                 - Concise: Title must not exceed five words.
                 - Engaging: Match the appropriate writing style and tone (factual, humorous, dramatic, etc.) of the original documents (Summary section).
                 - Natural: Ensure the title sounds authentic and human-like, never artificial.
 
                 Think step-by-step: Reflect on core themes → Determine appropriate tone → Generate concise and coherent title.
-                                 
-                Constraints (Hard rules): 
+
+                Constraints (Hard rules):
                  - The output list must be the same length as the input list
                  - The original language must be maintained. Do not change the language!
                  - The output must be a valid JSON in the format: {schema}
-            
+
                 """,
             ),
             ("user", "Input: {data}"),
@@ -523,7 +521,7 @@ class RSSFeedAnalyzer:
 
 
                 **Constraints (Hard rules):**
-                - The original language ({language}) must be maintained. 
+                - The original language ({language}) must be maintained.
                 - The output must be a valid JSON in the format: {schema}
                 - Unique titles should be ommitted from the mapping
                 - Ensure the results follow the consolidation guidelines
@@ -587,8 +585,8 @@ class RSSFeedAnalyzer:
                     - Conciseness: Keep the category name concise ideally no longer than 5 words.
                     - Reduction: One category should contain around 2 to 4 cluster titles and must not contain more than 6 titles.
                     - Engaging: Make sure that the consolidated titles sound natural but also engaging and unique. Avoid repeating the same key words.
-                                 
-                Constraints (Hard rules): 
+
+                Constraints (Hard rules):
                  - The original language ({language}) must be maintained.
                  - The output must be a valid JSON in the format: {schema}
                 """,

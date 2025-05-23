@@ -1,14 +1,14 @@
 import copy
 import os
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Union
 
 import streamlit as st
 from network_viz import build_networkx_graph, create_figure, update_figure
 from rss_feed_analyzer import AnalyzedEpisodes, RSSFeedAnalyzer
 from rss_feed_loader import InvalidRSSException
-from streamlit.runtime.scriptrunner import StopException
 from st_social_media_links import SocialMediaIcons
+from streamlit.runtime.scriptrunner import StopException
 
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
@@ -75,7 +75,7 @@ def pretty_key(v):
     return str(v).replace("_", " ").capitalize()
 
 
-def format_dict_to_markdown(display_data: Dict[str, Union[str, List[str]]]) -> str:
+def format_dict_to_markdown(display_data: dict[str, Union[str, list[str]]]) -> str:
     """
     Formats a dictionary into markdown text with keys as headers and lists as bullet points.
 
@@ -164,7 +164,7 @@ def set_title_on_top(title):
     st.markdown(
         """
         <style>
-               /* Remove blank space at top and bottom */ 
+               /* Remove blank space at top and bottom */
                .block-container {
                    padding-top: 2rem;
                    padding-bottom: 0rem;
@@ -239,10 +239,7 @@ def main(analyis_mode, animation_mode=False):
     else:
         reset_disabled = True
         podcast_options = sorted(podcasts.keys())
-        if st.session_state.podcast_query:
-            index = podcast_options.index(st.session_state.selected_podcast)
-        else:
-            index = None
+        index = podcast_options.index(st.session_state.selected_podcast) if st.session_state.podcast_query else None
         selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=index)
 
         st.session_state.selected_podcast = selected_podcast
@@ -273,7 +270,7 @@ def main(analyis_mode, animation_mode=False):
             st.markdown("")
             st.markdown("")
             st.markdown(
-                f""" 
+                """
             #### Explore the Big Picture Behind Every Podcast
 
             Podcasts are full of ideas, connections, and themes — but they’re not always easy to navigate. **FeedPAM** helps you break down, explore, and visualize the hidden patterns inside your favorite shows.
@@ -300,9 +297,7 @@ def main(analyis_mode, animation_mode=False):
         try:
             major_categories = analysed_episodes["category_2_clusters"]
             st.session_state.major_categories = major_categories
-            category_options = [ALL_KEY] + list(
-                sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)
-            )  # list(major_categories.keys())
+            category_options = [ALL_KEY] + sorted(major_categories, key=lambda k: len(major_categories[k]), reverse=True)  # list(major_categories.keys())
             with select_box_placeholder.container():
                 selected_category = st.selectbox(
                     "Select a category:",
@@ -377,19 +372,19 @@ def main(analyis_mode, animation_mode=False):
                 selection_mode=("points",),
                 on_select=on_select,
                 autoplay=True,
-                config=dict(
-                    scrollZoom=True,
-                    doubleClick="reset+autosize",
-                    doubleClickDelay=1000,
-                    displayModeBar=False if animation_mode else True,
-                    toImageButtonOptions={
+                config={
+                    "scrollZoom": True,
+                    "doubleClick": "reset+autosize",
+                    "doubleClickDelay": 1000,
+                    "displayModeBar": not animation_mode,
+                    "toImageButtonOptions": {
                         "format": "png",  # one of png, svg, jpeg, webp
                         "filename": "network_view",
                         "height": 500,
                         "width": 700,
                         "scale": 3,  # Multiply title/legend/axis/canvas sizes by this factor
                     },
-                ),
+                },
             )
 
         if analyis_mode == "static":
@@ -415,7 +410,7 @@ def main(analyis_mode, animation_mode=False):
                     - Each point represents an episode and similar episodes are visualised closer to each other.
                     - Click on a point to show episode details.
 
-                    **Note:** 
+                    **Note:**
                     - All insights are generated automatically with AI and may contain inaccuracies.
                     - For better user experience use a tablet, laptop or computer
                     """
@@ -429,7 +424,7 @@ def main(analyis_mode, animation_mode=False):
                     - Select a cluster by double clicking the name on the legend.
                     - Click on a point to show episode details.
 
-                    **Note:** 
+                    **Note:**
                     - All insights are generated automatically with AI and may contain inaccuracies.
                     - For better user experience use a tablet, laptop or computer.
                     """
