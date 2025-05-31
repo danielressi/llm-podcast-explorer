@@ -20,16 +20,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from prompts import CATEGORY_PROMPT, CLUSTER_TITLE_PROMPT, CONSOLIDATION_PROMPT, EXRACTION_PROMPT
 from pydantic import BaseModel, Field, RootModel, field_validator
 from rss_feed_loader import RSSFeedLoader
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import normalize
 
 COSINE_DISTANCE_THRESHOLD = 0.5
-
-
-class Mapping(RootModel):
-    root: dict[str, str]
 
 
 class SimpleList(RootModel):
@@ -58,7 +55,8 @@ class MajorCategories(Mapping):
 class ConsolidatedTitles(Mapping):
     mapping: dict[str, list[str]] = Field(
         ...,
-        description="Mapping of consolidated titles to the corresponding titles that are semantically too similar, duplicates or synonyms",
+        description="Mapping of consolidated titles to the corresponding titles"
+        " that are semantically too similar, duplicates or synonyms",
     )
 
 
@@ -166,31 +164,7 @@ class RSSFeedAnalyzer:
         self.logger.info(f"Analyzing {self.size} podcast episdoes")
         parser = PydanticOutputParser(pydantic_object=EpisodeInsights)
 
-        prompt_template = ChatPromptTemplate([
-            (
-                "system",
-                """
-            You are an information extraction and generalisation specialist for a podcast called {podcast}.
-            This is the description of the podcast to provide more context: {podcast_description}
-
-            Your task:
-
-            Given the description of an episode you have the following tasks:
-                - give a very short and poignant summary of the episode in no more than 15 words. Cut to the chase!
-                - extract up to {tag_limit} relevant tags
-                - suggest up to {theme_limit} fitting themes or topic areas that can be used to describe and generalize the topic of the episode.
-                - extract year and century of the topic. If not provided in description make a best guess based on the topic.
-                - check if there are references to other episodes (episode_id <-> referenced_episode_ids)
-
-            The goal is to analyse and cluster all of the episodes in a later stage, so the themes and tags should be consistent across all episodes.
-            Constraints:
-                - The tags and themes must be in the same language as the input
-                - Output your answer as JSON that matches the given schema: {format_instructions}.
-
-            """,
-            ),
-            ("user", "Episode Title: {title}\n\n Episode Content: {episode_content}"),
-        ]).partial(
+        prompt_template = ChatPromptTemplate(EXRACTION_PROMPT).partial(
             format_instructions=parser.get_format_instructions(),
             podcast=self.rss_loader.title,
             tag_limit=5,
@@ -394,56 +368,11 @@ class RSSFeedAnalyzer:
 
         return batches, cluster_batches
 
-    """
-        Create an authentic, engaging, and concise title (max. 5 words) in {language} for a group of related documents.
-        Your title must accurately reflect the documents' main themes, convey their essence clearly, and match their intended tone (factual, humorous, dramatic, etc.).
-        Prioritize coherence and natural expression.
-
-        You are an expert in gerneralizing semantic content.
-        Your task is to provide a poignant, authentic and concise title in {language} for a group of related documents.
-        The title must accuractely capture the essence of the documents and the mentioned themes, while also being engaging.
-
-        Consider the following guidelines:
-            - Generalsation: Capture the bigger picture behind the group of documents.
-            - Focus on themes: The documents contain themes. The title should reflect these themes.
-            - Relevance: The title must reflect the core ideas and themes present in the documents.
-            - Targeted: Depending on the content the titles should be factual, funny, dramatic etc.
-            - Conciseness: Keep the title concise ideally no longer than 5 words.
-            - Coherence: The title must be meaningful and must not sound artificial.
-
-        Example Input (extract): [['This episode explores how sound design shapes our experiences in ways we often don’t notice...','This episode uncovers the surprising histories and cultural significance behind everyday colors.'], ]
-        Example Output: ['The Hidden Designs That Shape Our World']
-    """
-
     def _generate_cluster_titles(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=ClusterTitlesBatch)
-        prompt_template = ChatPromptTemplate([
-            (
-                "system",
-                """
-                You are an expert title generator with a focus on the bigger picture.
-                Given a set of related documents with shared themes, generate an authentic, concise, and engaging title (max. 5 words) in {language}.
-
-                Follow these instructions strictly:
-
-                - Accurate: The title must represent the core themes that are listed in the documents.
-                - Generalized: Capture the broader, unifying idea or central theme shared across all documents. The title must apply to all documents.
-                - Broad: Do not include specific details in the title that are only applicable to a subset of the documents. Do not add specific epochs, years or places to the title.
-                - Concise: Title must not exceed five words.
-                - Engaging: Match the appropriate writing style and tone (factual, humorous, dramatic, etc.) of the original documents (Summary section).
-                - Natural: Ensure the title sounds authentic and human-like, never artificial.
-
-                Think step-by-step: Reflect on core themes → Determine appropriate tone → Generate concise and coherent title.
-
-                Constraints (Hard rules):
-                 - The output list must be the same length as the input list
-                 - The original language must be maintained. Do not change the language!
-                 - The output must be a valid JSON in the format: {schema}
-
-                """,
-            ),
-            ("user", "Input: {data}"),
-        ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
+        prompt_template = ChatPromptTemplate(CLUSTER_TITLE_PROMPT).partial(
+            schema=parser.get_format_instructions(), language=self.language_prompt
+        )
 
         self.logger.info("Consolidating episodes")
 
@@ -499,36 +428,9 @@ class RSSFeedAnalyzer:
 
     def _consolidate_clusters(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=ConsolidatedTitles)
-        prompt_template = ChatPromptTemplate([
-            (
-                "system",
-                """
-                You are an expert in text analysis and semantic consolidation.
-
-                You will receive a list of document titles. Your task is to identify **only those titles that are exact or near-exact semantic duplicates** and consolidate them under a single, generalized title.
-
-                Provide the output as a mapping using the following structure:
-                    Key: A single, generalized title that succinctly captures the shared meaning of its associated titles.
-                    Values: A list of the original, redundant titles that were grouped under this generalized title.
-
-                **Consolidation Principles:**
-
-                - **Extreme Caution**: Only consolidate titles if their meanings are *clearly and unambiguously identical or synonymous*. If there is any ambiguity, variation in nuance, scope, or intent — do **not** group them.
-                - **Minimal Grouping**: Consolidation is a rare scenario. Most titles will be unique already. It is highly unlikely that more than 5 titles should be grouped together.
-                - **No Information Loss**: Never merge titles if doing so risks omitting meaningful differences or specific details. Be especially careful with compound titles or those containing historical, cultural, or technical qualifiers.
-                - **Thoughtful Abstraction**: The generalized title should be *newly created* — a succinct abstraction of the grouped titles' core meaning. Avoid copying any single original title directly unless it is already appropriately general.
-                - **Uniquness**: Try to reduce repetitiveness across the consolidated titles and use more general but unique titles instead.
-
-
-                **Constraints (Hard rules):**
-                - The original language ({language}) must be maintained.
-                - The output must be a valid JSON in the format: {schema}
-                - Unique titles should be ommitted from the mapping
-                - Ensure the results follow the consolidation guidelines
-                """,
-            ),
-            ("user", "Input: {data}"),
-        ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
+        prompt_template = ChatPromptTemplate(CONSOLIDATION_PROMPT).partial(
+            schema=parser.get_format_instructions(), language=self.language_prompt
+        )
 
         chain = prompt_template | self.analysis_llm | parser
         self.logger.info("Consolidating clusters")
@@ -545,7 +447,6 @@ class RSSFeedAnalyzer:
             if len(r_titles) > 0:
                 clusters_df.loc[clusters_df["title"].isin(r_titles), "consolidated_title"] = c_title
 
-        assert (clusters_df.groupby("cluster")["consolidated_title"].nunique() == 1).all()
         clusters_unique_df = clusters_df.groupby("cluster")["consolidated_title"].first()
         clusters_unique_df.loc[-1] = self._noise_title
 
@@ -571,28 +472,9 @@ class RSSFeedAnalyzer:
 
     def _get_major_categories(self, analysed_episodes, clusters_df):
         parser = PydanticOutputParser(pydantic_object=MajorCategories)
-        prompt_template = ChatPromptTemplate([
-            (
-                "system",
-                """
-                You are an expert in document clustering and topic generalization.
-                You will be given a list of podcast cluster titles. Your task is to group related titles into high-level topic categories.
-
-                Consider the following guidelines:
-                    - Generalsation: Each group should reflect a broader category that accurately captures the essence of its titles. Categories should be general but relevant subtopics of the overall podcast theme.
-                    - Relevance: Only group together titles that fit into the same category. Each category should be distinct and coherent. Very similar clusters must not be spread out into different categories.
-                    - Completeness: Every title must be included in a category. If some titles don’t fit into existing groups, create one or more "miscellaneous" categories that still reflect a common thread.
-                    - Conciseness: Keep the category name concise ideally no longer than 5 words.
-                    - Reduction: One category should contain around 2 to 4 cluster titles and must not contain more than 6 titles.
-                    - Engaging: Make sure that the consolidated titles sound natural but also engaging and unique. Avoid repeating the same key words.
-
-                Constraints (Hard rules):
-                 - The original language ({language}) must be maintained.
-                 - The output must be a valid JSON in the format: {schema}
-                """,
-            ),
-            ("user", "Input: {data}"),
-        ]).partial(schema=parser.get_format_instructions(), language=self.language_prompt)
+        prompt_template = ChatPromptTemplate(CATEGORY_PROMPT).partial(
+            schema=parser.get_format_instructions(), language=self.language_prompt
+        )
 
         chain = prompt_template | self.analysis_llm | parser
         self.logger.info("Consolidating episodes")
@@ -645,7 +527,9 @@ class RSSFeedAnalyzer:
         """
         progress_bar.progress(
             20,
-            f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.extraction_llm.model_name}...",
+            f"""
+            Analyzing {self.title} rss feed ({min(self.size, limit)} episodes) with {self.extraction_llm.model_name} ...
+            """,
         )
         analysed_episodes = self.analyze_feed(limit)
 

@@ -75,16 +75,8 @@ def build_episode_lookup(G, global_positions, episodes):
     }
 
 
-def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
-    # -------------------------------
-    # 2) Build the Main Graph
-    # -------------------------------
-    G = nx.Graph()
+def build_cluster_nodes(G, episodes, clusters_2_category):
     all_clusters = Counter()
-    distance_map = episodes["distance_map"]
-    category_2_clusters = episodes["category_2_clusters"]
-    clusters_2_category = {c: k for k, v in category_2_clusters.items() for c in v}
-    # all_clusters = list(clusters_2_category.keys())
     for ep in episodes["episodes"]:
         century = ep["insights"]["topic_century"] if ep["insights"]["topic_century"] else 21
         cluster_titles = ep["clusters"]["consolidated_titles"]
@@ -115,11 +107,11 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
         )
         all_clusters.update(show_titles)
 
-    sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
-    # min_cluster_size = 2
-    # relevant_clusters = sorted_clusters[(sorted_clusters >= min_cluster_size) & (sorted_clusters < len(episodes["episodes"])*0.8)].index.to_list()
-    relevant_clusters = sorted_clusters.index.to_list()
+    return all_clusters
 
+
+def build_cluster_edges(G, episodes):
+    distance_map = episodes["distance_map"]
     edges_data = ()
     referenced_edges = ()
     for ep_x, ep_y in itertools.combinations(episodes["episodes"], 2):
@@ -142,6 +134,29 @@ def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
 
     G.add_weighted_edges_from(edges_data, attr="themes")
     G.add_weighted_edges_from(referenced_edges, attr="references")
+
+
+def build_networkx_graph(episodes, timeline=True, weight_threshold=0.8):
+    # -------------------------------
+    # 2) Build the Main Graph
+    # -------------------------------
+    G = nx.Graph()
+
+    category_2_clusters = episodes["category_2_clusters"]
+    clusters_2_category = {c: k for k, v in category_2_clusters.items() for c in v}
+    # all_clusters = list(clusters_2_category.keys())
+    all_clusters = build_cluster_nodes(G, episodes, clusters_2_category)
+
+    sorted_clusters = pd.Series(all_clusters).sort_values(ascending=False)
+    """
+    alternative:
+    # min_cluster_size = 2
+    # mask = (sorted_clusters >= min_cluster_size) & (sorted_clusters < len(episodes["episodes"])*0.8)
+    # relevant_clusters = sorted_clusters[mask].index.to_list()
+    """
+    relevant_clusters = sorted_clusters.index.to_list()
+
+    build_cluster_edges(G, episodes)
     # -------------------------------
     # 3) Identify century Buckets
     # -------------------------------
@@ -204,7 +219,6 @@ def create_figure(G, global_positions, clusters, show_grid=False, animation_mode
     cluster_node_indices = {c: set() for c in clusters}
     edge_x = []
     edge_y = []
-    offset = 0
     # widths = []
     for i, (u, v) in enumerate(G.edges()):
         # get the positions
@@ -217,10 +231,8 @@ def create_figure(G, global_positions, clusters, show_grid=False, animation_mode
         for sc in shared_clusters:
             # not all clusters passed on to selector
             if sc in cluster_edges_indices:
-                cluster_edges_indices[sc].add(i + offset)
-                cluster_edges_indices[sc].add(i + 1 + offset)
-
-        offset += 1
+                cluster_edges_indices[sc].add(i * 2)
+                cluster_edges_indices[sc].add(i * 2 + 1)
 
     fig.add_trace(
         go.Scatter(
@@ -283,34 +295,10 @@ def create_figure(G, global_positions, clusters, show_grid=False, animation_mode
     return fig, cluster_edges_indices, cluster_node_indices
 
 
-def update_figure(
-    fig,
-    selected_category,
-    filtered_clusters,
-    cluster_data,
-    timeline,
-    clicked,
-    previous_zoom,
-    selection_state,
-    animation_mode=False,
-):
-    if timeline:
-        fig.update_xaxes(title_text="Century")
-        fig.update_layout(
-            xaxis={"showgrid": True, "zeroline": True, "visible": True},
-            legend={"y": -0.5},
-        )
-
-    if (selected_category == "All") and not clicked:
-        return fig, None
-
-    selected_clusters = list(filtered_clusters.keys())
-
-    # fig.update_traces(hovertemplate=None)
+def update_cluster_nodes_and_edges(fig, cluster_data, filtered_clusters, cluster_colors, animation_mode):
     min_x, max_x = np.inf, -np.inf
     min_y, max_y = np.inf, -np.inf
-    cluster_colors = dict(zip(selected_clusters, itertools.cycle(COLOR_CYCLE)))
-    for selected_cluster in selected_clusters:
+    for selected_cluster in filtered_clusters:
         if selected_cluster not in cluster_data["cluster_edge_indices"]:
             continue
         edge_indices = cluster_data["cluster_edge_indices"][selected_cluster]
@@ -369,6 +357,36 @@ def update_figure(
                 name=selected_cluster,
             )
         )
+    return min_x, max_x, min_y, max_y
+
+
+def update_figure(
+    fig,
+    selected_category,
+    filtered_clusters,
+    cluster_data,
+    timeline,
+    clicked,
+    previous_zoom,
+    selection_state,
+    animation_mode=False,
+):
+    if timeline:
+        fig.update_xaxes(title_text="Century")
+        fig.update_layout(
+            xaxis={"showgrid": True, "zeroline": True, "visible": True},
+            legend={"y": -0.5},
+        )
+
+    if (selected_category == "All") and not clicked:
+        return fig, None
+
+    # fig.update_traces(hovertemplate=None)
+    selected_clusters = list(filtered_clusters.keys())
+    cluster_colors = dict(zip(selected_clusters, itertools.cycle(COLOR_CYCLE)))
+    min_x, max_x, min_y, max_y = update_cluster_nodes_and_edges(
+        fig, cluster_data, filtered_clusters, cluster_colors, animation_mode
+    )
 
     if clicked:
         for selection_data in selection_state:
@@ -403,17 +421,6 @@ def update_figure(
                     },
                 )
             )
-
-            # fig.add_annotation(
-            #     x=selection_data["x"],
-            #     y=selection_data["y"]+0.05,
-            #     text=f"<b>{text_with_line_breaks(selection_data["customdata"][0])}</b>",
-            #     showarrow=False,
-            #     font=dict(color="white"),
-            #     bgcolor="rgba(0, 0, 0, 0.6)",  # black with 70% opacity
-            #     xanchor="center",
-            #     yanchor="bottom",
-            # )
 
     zoom_info = None
     if clicked and animation_mode and selected_category != "All":
