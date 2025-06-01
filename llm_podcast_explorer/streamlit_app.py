@@ -201,6 +201,9 @@ def click_reset():
     st.session_state.click_reset = False
     st.session_state.searched_episode = None
 
+def reset_zoom():
+    st.session_state.zoom_state = None
+
 
 def set_podcast_from_query_params(podcasts):
     podcast_query = st.query_params.get("podcast", None)
@@ -451,7 +454,7 @@ def main(analyis_mode, animation_mode=False):
             if not st.session_state.click_reset:
                 st.session_state.click_reset = reset_view
 
-        timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False)
+        timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False, on_change=reset_zoom)
 
     if st.session_state.selected_podcast is None:
         render_intro_text()
