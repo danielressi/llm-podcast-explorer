@@ -393,7 +393,8 @@ def explore_analysed_episodes(analysed_episodes, timeline, animation_mode):
         elif st.session_state.selected_category == ALL_KEY:
             st.session_state.filtered_clusters = {}
         else:
-            st.session_state.filtered_clusters = {c: True for c in major_categories[st.session_state.selected_category]}
+            selected_category_clusters = major_categories[st.session_state.selected_category]
+            st.session_state.filtered_clusters = {c: True for c in selected_category_clusters}
 
     except StopException:
         st.session_state.click_selection = False
