@@ -10,15 +10,17 @@ class RSSFeedItem(BaseModel):
     index: int = Field(..., description="index of rss feed")
     title: str = Field(..., description="The title of the episode")
     subtitle: Optional[str] = Field(default=None, description="The subtitle of the episode")
-    description: Optional[str] = Field(default=None, 
-                                       description="The description of the episode", 
-                                       validation_alias=AliasChoices( "description", "summary"))
+    description: Optional[str] = Field(
+        default=None,
+        description="The description of the episode",
+        validation_alias=AliasChoices("description", "summary"),
+    )
     id: str = Field(..., description="The unique identifier of the episode")
     episode_number: Optional[int] = Field(default=None, description="", alias="podcast_episode")
     link: str = Field(
         ...,
         description="The link to the episode",
-        validation_alias=AliasChoices( "links", "link"),
+        validation_alias=AliasChoices("links", "link"),
     )
     published: str = Field(..., description="The date the episode was published")
     tags: Optional[list[Any]] = Field(default=None, description="Tags associated with the episode")

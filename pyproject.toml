@@ -1,6 +1,6 @@
 [project]
 name = "llm-podcast-explorer"
-version = "0.0.1"
+version = "0.0.2"
 description = "This repository allows you to explore your favourite podcast in an interactive visualisation by leveraging the automated analysis of an llm workflow."
 authors = [{ name = "Daniel Ressi", email = "ressi.daniel@gmail.com" }]
 readme = "README.md"
@@ -123,6 +123,7 @@ ignore = [
     "E731",
     "TRY003", # external messages in exceptions are too verbose
 ]
+exclude = ["llm_podcast_explorer/prompts.py"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
