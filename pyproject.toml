@@ -5,7 +5,7 @@ description = "This repository allows you to explore your favourite podcast in a
 authors = [{ name = "Daniel Ressi", email = "ressi.daniel@gmail.com" }]
 readme = "README.md"
 keywords = ['python']
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
