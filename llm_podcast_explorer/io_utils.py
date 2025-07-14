@@ -1,6 +1,5 @@
 import os
-
-import boto3
+#import boto3
 
 
 def write_to_r2(src_path: str, bucket, target_path: str):
