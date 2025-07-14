@@ -35,4 +35,4 @@ if __name__ == "__main__":
         if datetime.now().strftime("%A").lower() in days:
             LOGGER.info(f"Running scheduled analysis for {rss_url}")
 
-            run(rss_url=args.rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
+            run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
