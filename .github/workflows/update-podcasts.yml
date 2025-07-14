@@ -25,7 +25,7 @@ jobs:
 
       - name: Run data update script
         run: |
-          
-          PYTHONPATH=llm_podcast_explorer python scheduled_runs.py --output_path ./static
+          echo $(pwd)
+          PYTHONPATH=llm_podcast_explorer python llm_podcast_explorer/scheduled_runs.py --output_path ./static
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
