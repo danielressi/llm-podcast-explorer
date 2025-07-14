@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, RootModel, field_validator
 from rss_feed_loader import RSSFeedLoader
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import normalize
+from tqdm import tqdm
 
 COSINE_DISTANCE_THRESHOLD = 0.5
 
@@ -519,7 +520,48 @@ class RSSFeedAnalyzer:
         return AnalyzedEpisodes(episodes=consolidated_episodes, category_2_clusters=category_2_clusters), clusters_df
 
     def run(self, limit=1000):
-        raise NotImplementedError("todo: adapt run without streamlit")
+        """
+        Runs the analysis pipeline with tqdm progress bar (no Streamlit).
+        """
+
+        with tqdm(
+            total=100, desc="Podcast Analysis", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"
+        ) as pbar:
+            pbar.update(20)
+            pbar.set_description(
+                f"Analyzing {self.title} rss feed ({min(self.size, limit)} episodes)"
+                f" with {self.extraction_llm.model_name} ..."
+            )
+            analysed_episodes = self.analyze_feed(limit)
+
+            pbar.update(30 - pbar.n)
+            pbar.set_description("Clustering episode summaries ...")
+            text_catalog = self._create_episode_text_catalog(analysed_episodes.episodes)
+            summary_clusters, distance_map = self._cluster_text_catalog(text_catalog)
+
+            pbar.update(20)
+            pbar.set_description(f"Creating cluster titles with {self.analysis_llm.model_name}...")
+            clustered_episodes, titled_clusters = self._generate_cluster_titles(analysed_episodes, summary_clusters)
+
+            pbar.update(10)
+            pbar.set_description(f"Consolidating clusters with {self.analysis_llm.model_name}...")
+            consolidated_episodes, consolidated_clusters = self._consolidate_clusters(
+                clustered_episodes, titled_clusters
+            )
+
+            pbar.update(10)
+            pbar.set_description(f"Generating major categories with {self.analysis_llm.model_name}...")
+            finalized_episodes, final_clusters = self._get_major_categories(
+                consolidated_episodes, consolidated_clusters
+            )
+            finalized_episodes.distance_map = distance_map
+            finalized_episodes.extra["consolidation_map"] = (
+                final_clusters.groupby("consolidated_title")["title"].apply(lambda x: list(set(x))).to_dict()
+            )
+            self.logger.info("analysis completed")
+            pbar.update(10)
+            pbar.set_description("Preparing plot ...")
+            return finalized_episodes
 
     def run_with_streamlit_progress(self, progress_bar, limit=1000):
         """

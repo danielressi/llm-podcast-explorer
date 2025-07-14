@@ -201,6 +201,7 @@ def click_reset():
     st.session_state.click_reset = False
     st.session_state.searched_episode = None
 
+
 def reset_zoom():
     st.session_state.zoom_state = None
 
