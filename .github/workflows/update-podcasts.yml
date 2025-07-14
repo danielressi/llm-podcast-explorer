@@ -7,7 +7,7 @@ on:
 
 jobs:
   update-podcasts:
-    name: python
+    name: run scheduled analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -26,6 +26,6 @@ jobs:
       - name: Run data update script
         run: |
           
-          PYTHONPATH=llm_podcast_explorer python scheduled_run.py --output_path ./static
+          PYTHONPATH=llm_podcast_explorer python scheduled_runs.py --output_path ./static
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
