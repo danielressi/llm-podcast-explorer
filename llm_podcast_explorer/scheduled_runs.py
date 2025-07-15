@@ -9,7 +9,10 @@ from rss_feed_analyzer import RSSFeedAnalyzer
 
 LOGGER = logging.getLogger(__name__)
 
-SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["monday"]}
+SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
+            "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
+            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
+            }
 
 
 def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: int = 1000):
