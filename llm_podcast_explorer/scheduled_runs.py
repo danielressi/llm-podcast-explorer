@@ -17,7 +17,8 @@ SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wedn
 
 def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: int = 1000):
     analyzer = RSSFeedAnalyzer(rss_url=rss_url)
-    print("TEST_ENV: ",os.getenv("TEST_ENV", "not set"))
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY not found in environment")
     result = analyzer.run(limit=limit)
     filename = f"{analyzer.title}.json"
     output_path = Path(output_path) / filename
