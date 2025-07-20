@@ -11,7 +11,7 @@ LOGGER = logging.getLogger(__name__)
 
 SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
             "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
-            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
+            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday", "sunday"],
             }
 
 
@@ -40,3 +40,5 @@ if __name__ == "__main__":
             LOGGER.info(f"Running scheduled analysis for {rss_url}")
 
             run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
+        else:
+            LOGGER.info(f"Skipping {rss_url} for today, scheduled for {', '.join(days)}")
