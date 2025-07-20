@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
+import os
 from io_utils import write_to_json, write_to_r2
 from rss_feed_analyzer import RSSFeedAnalyzer
 
@@ -17,6 +17,7 @@ SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wedn
 
 def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: int = 1000):
     analyzer = RSSFeedAnalyzer(rss_url=rss_url)
+    print("TEST_ENV: ",os.getenv("TEST_ENV", "not set"))
     result = analyzer.run(limit=limit)
     filename = f"{analyzer.title}.json"
     output_path = Path(output_path) / filename
