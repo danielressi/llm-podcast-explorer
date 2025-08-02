@@ -6,6 +6,7 @@ on:
   workflow_dispatch:     # Allows manual triggering too
 
 jobs:
+  environment: scheduled_runs
   update-podcasts:
     name: run scheduled analysis
     runs-on: ubuntu-latest
@@ -28,7 +29,6 @@ jobs:
 
       - name: Run data update script
         run: |
-          echo $(echo $AWS_ENDPOINT_URL)
           uv run llm_podcast_explorer/scheduled_runs.py --output_path ./static --s3_bucket llm-podcast-explorer
         env:
           PYTHONPATH: llm_podcast_explorer
