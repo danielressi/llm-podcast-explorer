@@ -6,8 +6,8 @@ on:
   workflow_dispatch:     # Allows manual triggering too
 
 jobs:
-  environment: scheduled_runs
   update-podcasts:
+    environment: scheduled_runs
     name: run scheduled analysis
     runs-on: ubuntu-latest
 
