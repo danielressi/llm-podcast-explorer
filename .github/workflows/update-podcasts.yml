@@ -2,7 +2,7 @@ name: Scheduled Podcast Analysis
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # Every day at 08:00 UTC
+    - cron: '0 18 * * *'
   workflow_dispatch:     # Allows manual triggering too
 
 jobs:
@@ -32,8 +32,8 @@ jobs:
           uv run llm_podcast_explorer/scheduled_runs.py --output_path ./static --s3_bucket llm-podcast-explorer
         env:
           PYTHONPATH: llm_podcast_explorer
-          TEST_ENV: "test sucess"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
