@@ -11,7 +11,8 @@ LOGGER = logging.getLogger(__name__)
 
 SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
             "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
-            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday", "saturday"],
+            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
+            "https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"]
             }
 
 
