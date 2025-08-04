@@ -9,12 +9,13 @@ from rss_feed_analyzer import AnalyzedEpisodes, RSSFeedAnalyzer
 from rss_feed_loader import InvalidRSSException
 from st_social_media_links import SocialMediaIcons
 from streamlit.runtime.scriptrunner import StopException
+from io_utils import get_podcasts_from_s3, download_s3_file
 
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
 EPISODE_LIMIT = 1000
 DEFAULT_MODE = "active"
-
+CACHE_TIMEOUT= "12h"
 
 PODCAST_QUERY_LOOKUP = {
     "GAG": "Geschichten aus der Geschichte",
@@ -24,13 +25,18 @@ PODCAST_QUERY_LOOKUP = {
 }
 
 
-@st.cache_data(show_spinner=False)
-def load_static_data(checkpoint_path):
-    analysed_episodes = AnalyzedEpisodes.load(checkpoint_path)
+@st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
+def load_static_data(path, bucket_name=None):
+    if bucket_name is None:
+        analysed_episodes = AnalyzedEpisodes.load(path)
+    else: 
+        checkpoint_path = CHECKPOINT_PATH  / path
+        download_s3_file(bucket_name, path, checkpoint_path)
+        analysed_episodes = AnalyzedEpisodes.load(checkpoint_path)
     return analysed_episodes.model_dump()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
 def load_data(url, checkpoint):
     progress_bar = st.progress(0, "Loading data .. ")
     if url:
@@ -57,7 +63,7 @@ def load_data(url, checkpoint):
         progress_bar.empty()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
 def create_network_graph(analysed_episodes, timeline, animation_mode):
     G, global_positions, clusters, episode_lookup = build_networkx_graph(analysed_episodes, timeline)
     fig, cluster_edge_indices, cluster_node_indices = create_figure(
@@ -430,6 +436,17 @@ def main(analyis_mode, animation_mode=False):
             except InvalidRSSException as e:
                 st.error(e)
                 st.session_state.selected_podcast = None
+    elif analyis_mode == "s3-scheduled":
+        reset_disabled = True
+        podcasts = {p.stem: str(p) for p in get_podcasts_from_s3("llm-podcast-explorer") }
+        podcast_options = sorted(podcasts.keys())
+        index = podcast_options.index(st.session_state.selected_podcast) if st.session_state.podcast_query else None
+        selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=index)
+
+        st.session_state.selected_podcast = selected_podcast
+        # st.session_state.rss_url
+        if st.session_state.selected_podcast is not None:
+            analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast], bucket_name="llm-podcast-explorer")
     else:
         reset_disabled = True
         podcast_options = sorted(podcasts.keys())
@@ -469,6 +486,6 @@ def main(analyis_mode, animation_mode=False):
 if __name__ == "__main__":
     analyis_mode = os.environ.get("ANALYSIS_MODE", DEFAULT_MODE)
     animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ("true", "1", "t")
-    if analyis_mode not in ["static", "active"]:
+    if analyis_mode not in ["static", "active", "s3-scheduled"]:
         raise ValueError(f"Environment variable ANALYSIS_MODE has to be 'static' or 'active', but got {analyis_mode} ")
     main(analyis_mode, animation_mode)

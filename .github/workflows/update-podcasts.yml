@@ -1,13 +1,14 @@
-name: Weekly Data Update
+name: Scheduled Podcast Analysis
 
 on:
   schedule:
-    - cron: '0 0 1 * *'  # Every day at 08:00 UTC
+    - cron: '0 18 * * *'
   workflow_dispatch:     # Allows manual triggering too
 
 jobs:
   update-podcasts:
-    name: python
+    environment: scheduled_runs
+    name: run scheduled analysis
     runs-on: ubuntu-latest
 
     steps:
@@ -22,10 +23,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version-file: "pyproject.toml"
+      
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
 
       - name: Run data update script
         run: |
-          
-          PYTHONPATH=llm_podcast_explorer python scheduled_run.py --output_path ./static
+          uv run llm_podcast_explorer/scheduled_runs.py --output_path ./static --s3_bucket llm-podcast-explorer
         env:
+          PYTHONPATH: llm_podcast_explorer
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+

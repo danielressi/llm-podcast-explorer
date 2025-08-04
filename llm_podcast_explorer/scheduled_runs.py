@@ -3,17 +3,23 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
+import os
 from io_utils import write_to_json, write_to_r2
 from rss_feed_analyzer import RSSFeedAnalyzer
 
 LOGGER = logging.getLogger(__name__)
 
-SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["monday"]}
+SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
+            "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
+            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
+            "https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"]
+            }
 
 
 def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: int = 1000):
     analyzer = RSSFeedAnalyzer(rss_url=rss_url)
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY not found in environment")
     result = analyzer.run(limit=limit)
     filename = f"{analyzer.title}.json"
     output_path = Path(output_path) / filename
@@ -35,4 +41,6 @@ if __name__ == "__main__":
         if datetime.now().strftime("%A").lower() in days:
             LOGGER.info(f"Running scheduled analysis for {rss_url}")
 
-            run(rss_url=args.rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
+            run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
+        else:
+            LOGGER.info(f"Skipping {rss_url} for today, scheduled for {', '.join(days)}")
