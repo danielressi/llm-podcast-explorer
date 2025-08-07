@@ -2,6 +2,9 @@ import os
 from pathlib import Path
 import boto3
 
+def write_to_json(json_str: str, path: str):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(json_str)
 
 def write_to_r2(src_path: str, bucket, target_path: str):
     session = boto3.session.Session()
