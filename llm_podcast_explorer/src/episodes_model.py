@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
-from rss_feed_loader import RSSFeedItem
+
+from llm_podcast_explorer.src.rss_feed_loader import RSSFeedItem
 
 
 class EpisodeInsights(BaseModel):

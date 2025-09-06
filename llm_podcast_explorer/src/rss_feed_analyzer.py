@@ -7,7 +7,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import umap
-from episodes_model import AnalyzedEpisodes, ClusteredEpisodeInsights, Episode, EpisodeInsights
 from hdbscan import HDBSCAN as HDBSCAN
 from hdbscan.prediction import all_points_membership_vectors
 from langchain.embeddings import CacheBackedEmbeddings
@@ -20,12 +19,15 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from prompts import CATEGORY_PROMPT, CLUSTER_TITLE_PROMPT, CONSOLIDATION_PROMPT, EXRACTION_PROMPT
 from pydantic import BaseModel, Field, RootModel, field_validator
-from rss_feed_loader import RSSFeedLoader
+
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
+
+from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes, ClusteredEpisodeInsights, Episode, EpisodeInsights
+from llm_podcast_explorer.src.prompts import CATEGORY_PROMPT, CLUSTER_TITLE_PROMPT, CONSOLIDATION_PROMPT, EXRACTION_PROMPT
+from llm_podcast_explorer.src.rss_feed_loader import RSSFeedLoader
 
 COSINE_DISTANCE_THRESHOLD = 0.5
 
