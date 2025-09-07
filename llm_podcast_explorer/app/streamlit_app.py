@@ -13,6 +13,7 @@ from st_social_media_links import SocialMediaIcons
 from streamlit.runtime.scriptrunner import StopException
 
 
+
 CACHE_TIMEOUT= "12h"
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
@@ -473,6 +474,73 @@ def load_podcast(analyis_mode, animation_mode=False):
 if __name__ == "__main__":
     title = "Podcasts | Explored"
     st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
+    st.markdown("""
+    <style>
+    .category-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        color: #111;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+    }
+    .cluster-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 1.5rem 0 0.5rem 0;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .episode-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.2rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        transition: all 0.2s ease-in-out;
+    }
+    .episode-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+    .episode-link {
+        text-decoration: none;
+        color: #1e88e5;
+        font-weight: 600;
+        font-size: 1.05rem;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    .tags-container {
+        margin-top: 0.5rem;
+    }
+    .tag {
+        display: inline-block;
+        margin: 0.2rem 0.3rem 0 0;
+        padding: 0.35rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        background: #f5f5f5;
+        color: #333;
+    }
+    .tag:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+    .custom-expander {
+        margin-top: 0.8rem;
+        padding: 0.6rem 0.8rem;
+        background: #fafafa;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        color: #444;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     set_title_on_top(title)
    # st.sidebar.page_link('streamlit_app.py', label='Home')
     _init_sesion_state()

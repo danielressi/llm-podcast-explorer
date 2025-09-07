@@ -5,77 +5,7 @@ import streamlit as st
 import itertools
 import hashlib
 
-if "css_injected" not in st.session_state:
-        # --- CSS ---
-    st.markdown("""
-        <style>
-        .category-title {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            padding: 1rem;
-            border-radius: 12px;
-            color: #111;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
-        }
-        .cluster-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin: 1.5rem 0 0.5rem 0;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .episode-card {
-            background: white;
-            border-radius: 16px;
-            padding: 1.2rem;
-            margin: 1rem 0;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            transition: all 0.2s ease-in-out;
-        }
-        .episode-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 14px rgba(0,0,0,0.12);
-        }
-        .episode-link {
-            text-decoration: none;
-            color: #1e88e5;
-            font-weight: 600;
-            font-size: 1.05rem;
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-        .tags-container {
-            margin-top: 0.5rem;
-        }
-        .tag {
-            display: inline-block;
-            margin: 0.2rem 0.3rem 0 0;
-            padding: 0.35rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.78rem;
-            font-weight: 500;
-            background: #f5f5f5;
-            color: #333;
-        }
-        .tag:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 14px rgba(0,0,0,0.12);
-        }
-        .custom-expander {
-            margin-top: 0.8rem;
-            padding: 0.6rem 0.8rem;
-            background: #fafafa;
-            border-radius: 10px;
-            font-size: 0.9rem;
-            color: #444;
-        }
-        </style>
-        """, unsafe_allow_html=True)
 
-    st.session_state["css_injected"] = True
 
 # 🎨 Define a rotating palette (inspired by NTS / ChatGPT tones)
 # 🎨 Define a rotating palette (inspired by NTS / ChatGPT tones)
@@ -113,16 +43,16 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
     cluster_colors = assign_cluster_colors(filtered_clusters)
             # Category header with auto color
     
-    if selected_category != "All":
-        bg_color = "#BABEC0"
-        st.markdown(
-            f"""
-            <div style="background:{bg_color}; padding:1rem; border-radius:12px; margin:1rem 0;">
-                <h2 style="margin:0; color:#111;">{selected_category}</h2>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    # if selected_category != "All":
+    #     bg_color = "#BABEC0"
+    #     st.markdown(
+    #         f"""
+    #         <div style="background:{bg_color}; padding:1rem; border-radius:12px; margin:1rem 0;">
+    #             <h2 style="margin:0; color:#111;">{selected_category}</h2>
+    #         </div>
+    #         """,
+    #         unsafe_allow_html=True
+    #     )
     
 
     # Iterate clusters (keep loop unchanged as requested)
@@ -130,38 +60,60 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
         df_cluster = category_df[category_df["consolidated_titles"].apply(lambda x: cluster in x if x else False)]
         if df_cluster.empty:
             continue
-        cluster_color = cluster_colors.get(cluster, "#DDD")
         #st.markdown(f"<div class='cluster-title'>{cluster}</div>", unsafe_allow_html=True)
+        cluster_color = cluster_colors.get(cluster, "#E0E0E0")
         st.markdown(
             f"<div class='cluster-title' style='background:{cluster_color}; padding:0.4rem 0.8rem; border-radius:8px;'>{cluster}</div>",
             unsafe_allow_html=True
         )
-        for row in df_cluster.itertuples():
-            col1, col2 = st.columns([2, 1])
 
-            with col1:
-                st.markdown(
-                    f"""
-                    <div class='episode-card'>
-                        <a class='episode-link' href='{row.podlink}' target='_blank'>
-                            🎧 {row.title}
-                        </a>
-                    </div>
-                    """, unsafe_allow_html=True
+        for row in df_cluster.itertuples():
+            # small helper to convert hex to rgba for a subtle background tint
+            def hex_to_rgba(h: str, a: float = 0.06) -> str:
+                h = h.lstrip("#")
+                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+                return f"rgba({r},{g},{b},{a})"
+
+            # tags HTML
+            tags_html = ""
+            if hasattr(row, "tags") and row.tags:
+                tags_html = " ".join([f"<span class='tag'>{tag}</span>" for tag in row.tags])
+
+            # description HTML using native <details> for a compact, sleek expander
+            desc_html = ""
+            if hasattr(row, "description") and row.description:
+                safe_desc = str(row.description).replace("\n", "<br/>")
+                desc_html = (
+                    f"<details class='custom-expander'><summary>More info</summary>"
+                    f"<div style='margin-top:0.5rem'>{safe_desc}</div></details>"
                 )
 
-            
-                if hasattr(row, "description") and row.description:
-                    with st.expander("More info", expanded=False):
-                        st.write(row.description)
+            accent_bg = hex_to_rgba(cluster_color, 0.06)
 
-            with col2:
-                if hasattr(row, "tags") and row.tags:
-                    tag_html = " ".join(
-                        [f"<span class='tag'>{tag}</span>" for tag in row.tags]
-                    )
-                    st.markdown(tag_html, unsafe_allow_html=True)
-
+            # Single HTML card that visually spans both "columns" with a left accent,
+            # subtle tinted background and tags aligned to the right.
+            st.markdown(
+                f"""
+                  <div class='episode-card' style='border-left:6px solid {cluster_color};
+                                                  background:{accent_bg};
+                                                  padding:1rem;
+                                                  margin:1rem 0;
+                                                  display:flex;
+                                                  gap:1rem;
+                                                  align-items:flex-start;'>
+                    <div style='flex:2; min-width:0;'>
+                        <a class='episode-link' href='{row.podlink}' target='_blank' style='color:{cluster_color};'>
+                            🎧 {row.title}
+                        </a>
+                        {desc_html}
+                    </div>
+                    <div style='flex:1; display:flex; justify-content:flex-end; gap:0.4rem; flex-wrap:wrap;'>
+                        {tags_html}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 @st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
 def prepare_table(episodes: AnalyzedEpisodes) -> pd.DataFrame:

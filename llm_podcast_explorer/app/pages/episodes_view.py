@@ -203,7 +203,12 @@ def format_dict_to_markdown(display_data: dict[str, Union[str, list[str]]]) -> s
         # st.markdown(f'<div style="max-height:400px; overflow:auto;">{description}</div>', unsafe_allow_html=True)
         st.markdown(description)
 
-
+if "analysed_episodes" not in st.session_state or st.session_state.get("analysed_episodes") is None:
+    try:
+        load_data()  # cached; should re-create st.session_state items the root page sets
+    except Exception:
+        st.warning("Session state expired or not initialized. Click Home to re-initialize the app.")
+        st.switch_page("./streamlit_app.py")
 
 analysis_mode = os.environ.get("ANALYSIS_MODE", DEFAULT_MODE)
 animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ("true", "1", "t")
@@ -214,11 +219,80 @@ reset_disabled = analysis_mode  in ["static", "s3-scheduled"]
 title = "Podcasts | Explored"
 st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
 set_title_on_top(title)
+st.markdown("""
+    <style>
+    .category-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        color: #111;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+    }
+    .cluster-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 1.5rem 0 0.5rem 0;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .episode-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.2rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        transition: all 0.2s ease-in-out;
+    }
+    .episode-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+    .episode-link {
+        text-decoration: none;
+        color: #1e88e5;
+        font-weight: 600;
+        font-size: 1.05rem;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    .tags-container {
+        margin-top: 0.5rem;
+    }
+    .tag {
+        display: inline-block;
+        margin: 0.2rem 0.3rem 0 0;
+        padding: 0.35rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        background: #f5f5f5;
+        color: #333;
+    }
+    .tag:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+    .custom-expander {
+        margin-top: 0.8rem;
+        padding: 0.6rem 0.8rem;
+        background: #fafafa;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        color: #444;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 #st.sidebar.page_link('streamlit_app.py', label='Home')
 
 with st.sidebar:
-    home_button = st.button("Home", key=None, help=None, on_click=go_to_home)
-    
+
+    home_clicked = st.button("Home", key="home_button")
+    if home_clicked:
+       go_to_home()
     col1, col2 = st.columns([1, 1])
     with col1:
         reset = st.button("Rerun analysis", disabled=reset_disabled)
@@ -242,7 +316,6 @@ if st.session_state.analysed_episodes is not None:
         analysed_episodes, timeline, animation_mode=animation_mode
     )
     
-    tab1, tab2 = st.tabs(["Table", "Graph"])
     try:
         major_categories = analysed_episodes["category_2_clusters"]
         selected_category = st_category_selection(major_categories)
@@ -282,7 +355,8 @@ if st.session_state.analysed_episodes is not None:
         else:
             selected_category_clusters = major_categories[st.session_state.selected_category]
             st.session_state.filtered_clusters = {c: True for c in selected_category_clusters}
-
+        
+        tab1, tab2 = st.tabs(["Table", "Graph"])
         with tab1:
             df = prepare_table(st.session_state.analysed_episodes["episodes"])
             show_table(df, st.session_state.category_selection, st.session_state.filtered_clusters)
