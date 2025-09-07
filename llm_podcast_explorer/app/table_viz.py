@@ -24,6 +24,11 @@ def assign_cluster_colors(clusters):
     color_cycle = itertools.cycle(PALETTE)
     return {cluster: next(color_cycle) for cluster in clusters}
 
+# small helper to convert hex to rgba for a subtle background tint
+def hex_to_rgba(h: str, a: float = 0.06) -> str:
+    h = h.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{a})"
 
 def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list[str] | None = None):
     """Render episodes from a given category in a mobile-friendly layout with tags & expandable description."""
@@ -41,19 +46,28 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
         return
 
     cluster_colors = assign_cluster_colors(filtered_clusters)
-            # Category header with auto color
-    
-    # if selected_category != "All":
-    #     bg_color = "#BABEC0"
-    #     st.markdown(
-    #         f"""
-    #         <div style="background:{bg_color}; padding:1rem; border-radius:12px; margin:1rem 0;">
-    #             <h2 style="margin:0; color:#111;">{selected_category}</h2>
-    #         </div>
-    #         """,
-    #         unsafe_allow_html=True
-    #     )
-    
+
+    category_color = "#BABEC0"
+    category_bg = hex_to_rgba(category_color, 0.12)
+
+    # prepare a compact set of cluster chips (show up to 8)
+    visible_clusters = list(filtered_clusters) if filtered_clusters else []
+
+    display_name = "All Categories" if selected_category == "All" else selected_category
+    # --- Category header ---
+    st.markdown(
+        f"""
+        <div style="background:{category_bg}; padding:1rem; border-radius:12px; margin:0.6rem 0;">
+          <div style="min-width:0;">
+            <div style="font-weight:800; font-size:1.35rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</div>
+            <div style="font-size:0.9rem; color:#555;">{len(visible_clusters)} clusters • {len(category_df)} episodes</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 
     # Iterate clusters (keep loop unchanged as requested)
     for cluster in filtered_clusters:
@@ -68,11 +82,7 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
         )
 
         for row in df_cluster.itertuples():
-            # small helper to convert hex to rgba for a subtle background tint
-            def hex_to_rgba(h: str, a: float = 0.06) -> str:
-                h = h.lstrip("#")
-                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-                return f"rgba({r},{g},{b},{a})"
+
 
             # tags HTML
             tags_html = ""
