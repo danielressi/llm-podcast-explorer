@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import os
+import time
+from openai.error import APIConnectionError
 from src.io_utils import write_to_json, write_to_r2
 from src.rss_feed_analyzer import RSSFeedAnalyzer
 
@@ -28,7 +30,7 @@ def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: 
     if s3_bucket:
         write_to_r2(output_path, s3_bucket, filename)
 
-
+MAX_RETRIES = 3
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze an RSS feed and save the result.")
     parser.add_argument("--output_path", help="Path to save the analysis result")
@@ -42,6 +44,18 @@ if __name__ == "__main__":
         if datetime.now().strftime("%A").lower() in days:
             LOGGER.info(f"Running scheduled analysis for {rss_url}")
 
-            run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
+
+            for attempt in range(MAX_RETRIES):
+                try:
+                    run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
+                    break
+                except APIConnectionError as e:
+                    LOGGER.warning(f"Attempt {attempt} failed with APIConnectionError: {e}")
+                    if attempt >= MAX_RETRIES:
+                        LOGGER.exception("Max retries reached, aborting.")
+                        continue
+                    sleep_seconds = 2 ** attempt
+                    LOGGER.info(f"Retrying in {sleep_seconds} seconds...")
+                    time.sleep(sleep_seconds)
         else:
             LOGGER.info(f"Skipping {rss_url} for today, scheduled for {', '.join(days)}")
