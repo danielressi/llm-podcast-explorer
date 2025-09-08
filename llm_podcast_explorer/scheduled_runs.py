@@ -15,7 +15,8 @@ SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wedn
             "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
             "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
             "https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"],
-            "https://podcasts.apple.com/nl/podcast/data-skeptic/id890348705": ["monday"]
+            "https://podcasts.apple.com/nl/podcast/data-skeptic/id890348705": ["monday"],
+            "https://podcasts.apple.com/nl/podcast/wanging-on-with-graham-norton-and-maria-mcerlane/id1821737353": ["monday"]
             }
 
 
