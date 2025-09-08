@@ -72,23 +72,31 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
         unsafe_allow_html=True,
     )
     show_clusters = [k for k, show in filtered_clusters.items() if show and show != "legendonly"]
-    
     random.shuffle(show_clusters)
+
+    # Ensure the first non-empty cluster starts expanded
+    cluster_index = 0
+
     # Iterate clusters (keep loop unchanged as requested)
     for cluster in show_clusters:
         df_cluster = category_df[category_df["consolidated_titles"].apply(lambda x: cluster in x if x else False)]
         if df_cluster.empty:
             continue
-        #st.markdown(f"<div class='cluster-title'>{cluster}</div>", unsafe_allow_html=True)
+
+        # Build an expandable <details> per cluster (first non-empty opened)
         cluster_color = cluster_colors.get(cluster, "#E0E0E0")
-        st.markdown(
-            f"<div class='cluster-title' style='background:{cluster_color}; padding:0.4rem 0.8rem; border-radius:8px;'>{cluster}</div>",
-            unsafe_allow_html=True
+        open_attr = " open" if cluster_index == 0 else ""
+        cluster_index += 1
+
+        cluster_html = []
+        cluster_html.append(
+            f"<details class='cluster-details' style='margin:0.6rem 0;'{open_attr}>"
+            f"<summary class='cluster-title' style='background:{cluster_color}; padding:0.4rem 0.8rem; border-radius:8px; cursor:pointer;'>"
+            f"{cluster} &nbsp; <span style='color:#666; font-weight:600;'>({len(df_cluster)})</span>"
+            f"</summary>"
         )
 
         for row in df_cluster.itertuples():
-
-
             # tags HTML
             tags_html = ""
             if hasattr(row, "tags") and row.tags:
@@ -102,34 +110,34 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
                     f"<details class='custom-expander'><summary>More info</summary>"
                     f"<div style='margin-top:0.5rem'>{safe_desc}</div></details>"
                 )
+
             accent_bg = hex_to_rgba(cluster_color, 0.06)
 
-            # Single HTML card that visually spans both "columns" with a accent around the edges
-            # (left,top,right,bottom), subtle tinted background and tags aligned to the right.
-            st.markdown(
-                f"""
-                  <div class='episode-card' style='border:6px solid {cluster_color};
-                                                  background:{accent_bg};
-                                                  padding:1rem;
-                                                  margin:1rem 0;
-                                                  border-radius:10px;
-                                                  display:flex;
-                                                  gap:1rem;
-                                                  align-items:flex-start;'>
-                    <div style='flex:2; min-width:0;'>
-                        <a class='episode-link' href='{row.podlink}' target='_blank' style='color:{cluster_color};'>
-                            🎧 {row.title}
-                        </a>
-                        {desc_html}
-                    </div>
-                    <div style='flex:1; display:flex; justify-content:flex-end; gap:0.4rem; flex-wrap:wrap;'>
-                        {tags_html}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            # Single HTML card inside the cluster details (avoid leading indentation/newline)
+            card_html = (
+                f"<div class='episode-card' style='border:6px solid {cluster_color};"
+                f"background:{accent_bg};"
+                f"padding:1rem;"
+                f"margin:1rem 0;"
+                f"border-radius:10px;"
+                f"display:flex;"
+                f"gap:1rem;"
+                f"align-items:flex-start;'>"
+                f"<div style='flex:2; min-width:0;'>"
+                f"<a class='episode-link' href='{row.podlink}' target='_blank' style='color:{cluster_color}; text-decoration:none;'>🎧 {row.title}</a>"
+                f"{desc_html}"
+                f"</div>"
+                f"<div style='flex:1; display:flex; justify-content:flex-end; gap:0.4rem; flex-wrap:wrap;'>"
+                f"{tags_html}"
+                f"</div>"
+                f"</div>"
             )
-            
+            cluster_html.append(card_html)
+
+        cluster_html.append("</details>")
+        st.markdown("".join(cluster_html), unsafe_allow_html=True)
+        
+
 
 
 @st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
