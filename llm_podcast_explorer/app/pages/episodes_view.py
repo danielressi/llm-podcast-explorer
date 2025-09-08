@@ -290,22 +290,25 @@ st.markdown("""
 
 with st.sidebar:
 
-    home_clicked = st.button("Home", key="home_button")
-    if home_clicked:
-       go_to_home()
+
     col1, col2 = st.columns([1, 1])
     with col1:
-        reset = st.button("Rerun analysis", disabled=reset_disabled)
+        home_clicked = st.button("Home", key="home_button")
+        if home_clicked:
+            go_to_home()
+        reset = st.button("Rerun analysis", disabled=reset_disabled) if not reset_disabled else False
+    with col2:
+        reset_view = st.button("Reset", disabled=False)
+        if not st.session_state.click_reset:
+            st.session_state.click_reset = reset_view
+
         if reset and st.session_state.selected_podcast is not None:
             st.session_state.checkpoint = False
             st.session_state.reset_podcasts = False
             load_data.clear()
             st.switch_page("./streamlit_app.py")
             #st.rerun()
-    with col2:
-        reset_view = st.button("Reset view", disabled=False)
-        if not st.session_state.click_reset:
-            st.session_state.click_reset = reset_view
+
 
     timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False, on_change=reset_zoom)
 
@@ -359,7 +362,12 @@ if st.session_state.analysed_episodes is not None:
         tab1, tab2 = st.tabs(["Table", "Graph"])
         with tab1:
             df = prepare_table(st.session_state.analysed_episodes["episodes"])
-            show_table(df, st.session_state.category_selection, st.session_state.filtered_clusters)
+            if st.session_state.searched_episode is not None:
+
+                mask = df["title"] == st.session_state.searched_episode
+                if mask.any():
+                    df = pd.concat([df[mask], df[~mask]], ignore_index=True)
+            show_table(df, st.session_state.selected_category, st.session_state.filtered_clusters)
 
         with tab2:
             update_and_render_fig(base_fig, cluster_data, timeline, animation_mode)

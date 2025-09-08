@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 import itertools
 import hashlib
+import random
 
 
 
@@ -34,11 +35,15 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
     """Render episodes from a given category in a mobile-friendly layout with tags & expandable description."""
 
     # Pick data
+    if isinstance(selected_category, list):
+        selected_category = selected_category[0]
 
     category_df = df if selected_category == "All" else df[df["major_category"] == selected_category]
 
+
+
     if len(filtered_clusters) == 0:
-        filtered_clusters = set(df["consolidated_titles"].explode())
+        filtered_clusters = {k: True for k in df["consolidated_titles"].explode().unique()}
 
 
     if category_df.empty:
@@ -53,7 +58,7 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
     # prepare a compact set of cluster chips (show up to 8)
     visible_clusters = list(filtered_clusters) if filtered_clusters else []
 
-    display_name = "All Categories" if selected_category == "All" else selected_category
+    display_name = "Showing All Categories" if selected_category == "All" else selected_category
     # --- Category header ---
     st.markdown(
         f"""
@@ -66,11 +71,11 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
         """,
         unsafe_allow_html=True,
     )
-
-
-
+    show_clusters = [k for k, show in filtered_clusters.items() if show and show != "legendonly"]
+    
+    random.shuffle(show_clusters)
     # Iterate clusters (keep loop unchanged as requested)
-    for cluster in filtered_clusters:
+    for cluster in show_clusters:
         df_cluster = category_df[category_df["consolidated_titles"].apply(lambda x: cluster in x if x else False)]
         if df_cluster.empty:
             continue
@@ -97,17 +102,17 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
                     f"<details class='custom-expander'><summary>More info</summary>"
                     f"<div style='margin-top:0.5rem'>{safe_desc}</div></details>"
                 )
-
             accent_bg = hex_to_rgba(cluster_color, 0.06)
 
-            # Single HTML card that visually spans both "columns" with a left accent,
-            # subtle tinted background and tags aligned to the right.
+            # Single HTML card that visually spans both "columns" with a accent around the edges
+            # (left,top,right,bottom), subtle tinted background and tags aligned to the right.
             st.markdown(
                 f"""
-                  <div class='episode-card' style='border-left:6px solid {cluster_color};
+                  <div class='episode-card' style='border:6px solid {cluster_color};
                                                   background:{accent_bg};
                                                   padding:1rem;
                                                   margin:1rem 0;
+                                                  border-radius:10px;
                                                   display:flex;
                                                   gap:1rem;
                                                   align-items:flex-start;'>
@@ -124,6 +129,8 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
                 """,
                 unsafe_allow_html=True,
             )
+            
+
 
 @st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
 def prepare_table(episodes: AnalyzedEpisodes) -> pd.DataFrame:
