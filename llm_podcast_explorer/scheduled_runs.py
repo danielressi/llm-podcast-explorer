@@ -11,12 +11,12 @@ from src.rss_feed_analyzer import RSSFeedAnalyzer
 
 LOGGER = logging.getLogger(__name__)
 RUN_ALL = True
-SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
+SCHEDULE = {#"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
            # "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
             #"https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
-            "https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"],
-            "https://podcasts.apple.com/nl/podcast/data-skeptic/id890348705": ["monday"],
-            "https://podcasts.apple.com/nl/podcast/wanging-on-with-graham-norton-and-maria-mcerlane/id1821737353": ["monday"],
+            #"https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"],
+            #"https://podcasts.apple.com/nl/podcast/data-skeptic/id890348705": ["monday"],
+            #"https://podcasts.apple.com/nl/podcast/wanging-on-with-graham-norton-and-maria-mcerlane/id1821737353": ["monday"],
             "https://podcasts.apple.com/nl/podcast/comedy-bang-bang-the-podcast/id316045799?l=en-GB": ["monday"],
             "https://podcasts.apple.com/nl/podcast/verbrechen/id1374777077": ["tuesday"],
             "https://podcasts.apple.com/nl/podcast/zeit-wissen-woher-wei%C3%9Ft-du-das/id338219632": ["sunday"],
@@ -55,8 +55,8 @@ if __name__ == "__main__":
                 try:
                     run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
                     break
-                except (APIConnectionError, RateLimitError, Timeout) as e:
-                    LOGGER.warning(f"Attempt {attempt} failed with APIConnectionError: {e}")
+                except Exception as e:
+                    LOGGER.warning(f"Attempt {attempt} failed with: {e}")
                     if attempt >= MAX_RETRIES:
                         LOGGER.exception("Max retries reached, aborting.")
                         continue
