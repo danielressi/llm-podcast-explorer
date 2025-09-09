@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 import os
 import time
-from openai.error import APIConnectionError
+from openai import APIConnectionError, RateLimitError, Timeout
 from src.io_utils import write_to_json, write_to_r2
 from src.rss_feed_analyzer import RSSFeedAnalyzer
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
                 try:
                     run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
                     break
-                except APIConnectionError as e:
+                except (APIConnectionError, RateLimitError, Timeout) as e:
                     LOGGER.warning(f"Attempt {attempt} failed with APIConnectionError: {e}")
                     if attempt >= MAX_RETRIES:
                         LOGGER.exception("Max retries reached, aborting.")
