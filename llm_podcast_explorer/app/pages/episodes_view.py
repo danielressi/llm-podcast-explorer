@@ -2,11 +2,19 @@ import copy
 import os
 import streamlit as st
 from typing import Union
-from llm_podcast_explorer.app.streamlit_app import ALL_KEY, CACHE_TIMEOUT, DEFAULT_MODE, show_social, load_data, set_title_on_top
+from llm_podcast_explorer.app.streamlit_app import (
+    ALL_KEY,
+    CACHE_TIMEOUT,
+    DEFAULT_MODE,
+    show_social,
+    load_data,
+    set_title_on_top,
+)
 from llm_podcast_explorer.app.network_viz import build_networkx_graph, create_figure, update_figure
 from llm_podcast_explorer.app.table_viz import prepare_table, show_table
 from streamlit.runtime.scriptrunner import StopException
 import pandas as pd
+
 
 def reset_search():
     st.session_state.searched_episode = None
@@ -14,20 +22,24 @@ def reset_search():
     st.session_state.episode_selection = None
     st.session_state.checkpoint = True
 
+
 def reset_category_selection():
     st.session_state.category_selection = ALL_KEY
     st.session_state.selection_state = None
     st.session_state.zoom_state = None
     st.session_state.checkpoint = True
 
+
 def reset_zoom():
     st.session_state.zoom_state = None
+
 
 def click_reset():
     """User clicked on reset view or double clicked graph"""
     st.session_state.selected_category = ALL_KEY
     st.session_state.click_reset = False
     st.session_state.searched_episode = None
+
 
 def st_category_selection(major_categories):
     st.session_state.major_categories = major_categories
@@ -41,6 +53,7 @@ def st_category_selection(major_categories):
             on_change=reset_search,
         )
     return selected_category
+
 
 def show_infos(analysis_mode):
     if analysis_mode == "static":
@@ -85,6 +98,7 @@ def show_infos(analysis_mode):
                 - For better user experience use a tablet, laptop or computer.
                 """
 
+
 def update_and_render_fig(base_fig, cluster_data, timeline, animation_mode):
     fig = copy.deepcopy(base_fig)
 
@@ -125,6 +139,7 @@ def update_and_render_fig(base_fig, cluster_data, timeline, animation_mode):
             },
         )
 
+
 def on_select():
     if "plotly_state" in st.session_state:
         st.session_state.click_selection = True
@@ -135,6 +150,7 @@ def on_select():
             st.session_state.searched_episode = None
             st.session_state.click_selection = False
             # st.session_state.click_reset = True
+
 
 def go_to_home():
     st.session_state.selected_podcast = None
@@ -203,6 +219,7 @@ def format_dict_to_markdown(display_data: dict[str, Union[str, list[str]]]) -> s
         # st.markdown(f'<div style="max-height:400px; overflow:auto;">{description}</div>', unsafe_allow_html=True)
         st.markdown(description)
 
+
 if "analysed_episodes" not in st.session_state or st.session_state.get("analysed_episodes") is None:
     try:
         load_data()  # cached; should re-create st.session_state items the root page sets
@@ -214,12 +231,13 @@ analysis_mode = os.environ.get("ANALYSIS_MODE", DEFAULT_MODE)
 animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ("true", "1", "t")
 
 
-reset_disabled = analysis_mode  in ["static", "s3-scheduled"]
+reset_disabled = analysis_mode in ["static", "s3-scheduled"]
 
 title = "Podcasts | Explored"
 st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
 set_title_on_top(title)
-st.markdown("""
+st.markdown(
+    """
     <style>
     .category-title {
         font-size: 1.8rem;
@@ -285,12 +303,12 @@ st.markdown("""
         color: #444;
     }
     </style>
-    """, unsafe_allow_html=True)
-#st.sidebar.page_link('streamlit_app.py', label='Home')
+    """,
+    unsafe_allow_html=True,
+)
+# st.sidebar.page_link('streamlit_app.py', label='Home')
 
 with st.sidebar:
-
-
     col1, col2 = st.columns([1, 1])
     with col1:
         home_clicked = st.button("Home", key="home_button")
@@ -307,8 +325,7 @@ with st.sidebar:
             st.session_state.reset_podcasts = False
             load_data.clear()
             st.switch_page("./streamlit_app.py")
-            #st.rerun()
-
+            # st.rerun()
 
     timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False, on_change=reset_zoom)
 
@@ -318,7 +335,7 @@ if st.session_state.analysed_episodes is not None:
     base_fig, cluster_data, episode_lookup = create_network_graph(
         analysed_episodes, timeline, animation_mode=animation_mode
     )
-    
+
     try:
         major_categories = analysed_episodes["category_2_clusters"]
         selected_category = st_category_selection(major_categories)
@@ -358,12 +375,11 @@ if st.session_state.analysed_episodes is not None:
         else:
             selected_category_clusters = major_categories[st.session_state.selected_category]
             st.session_state.filtered_clusters = {c: True for c in selected_category_clusters}
-        
+
         tab1, tab2 = st.tabs(["Table", "Graph"])
         with tab1:
             df = prepare_table(st.session_state.analysed_episodes["episodes"])
             if st.session_state.searched_episode is not None:
-
                 mask = df["title"] == st.session_state.searched_episode
                 if mask.any():
                     df = pd.concat([df[mask], df[~mask]], ignore_index=True)
@@ -372,13 +388,10 @@ if st.session_state.analysed_episodes is not None:
         with tab2:
             update_and_render_fig(base_fig, cluster_data, timeline, animation_mode)
 
-
     except StopException:
         st.session_state.click_selection = False
         st.session_state.selected_category = ALL_KEY
 
-
     show_infos(analysis_mode)
-
 
     show_social()

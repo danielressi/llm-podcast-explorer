@@ -1,7 +1,6 @@
 from plotly import graph_objects as go
 
 
-
 def play_button(frame_duration, transition_duration):
     return {
         "label": "Play",

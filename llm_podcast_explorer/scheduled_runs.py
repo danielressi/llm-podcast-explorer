@@ -11,18 +11,19 @@ from src.rss_feed_analyzer import RSSFeedAnalyzer
 
 LOGGER = logging.getLogger(__name__)
 RUN_ALL = False
-SCHEDULE = {"https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
-            "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
-            "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
-            "https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"],
-            "https://podcasts.apple.com/nl/podcast/data-skeptic/id890348705": ["monday"],
-            "https://podcasts.apple.com/nl/podcast/wanging-on-with-graham-norton-and-maria-mcerlane/id1821737353": ["monday"],
-            "https://podcasts.apple.com/nl/podcast/comedy-bang-bang-the-podcast/id316045799?l=en-GB": ["monday"],
-            "https://podcasts.apple.com/nl/podcast/verbrechen/id1374777077": ["tuesday"],
-            "https://podcasts.apple.com/nl/podcast/zeit-wissen-woher-wei%C3%9Ft-du-das/id338219632": ["sunday"],
-            "https://podcasts.apple.com/nl/podcast/youre-dead-to-me/id1479973402": ["friday"],
-            "https://podcasts.apple.com/nl/podcast/the-atlas-obscura-podcast/id1555769970": ["saturday"]
-            }
+SCHEDULE = {
+    "https://geschichten-aus-der-geschichte.podigee.io/feed/mp3": ["wednesday"],
+    "https://podcasts.apple.com/us/podcast/99-invisible/id394775318": ["tuesday"],
+    "https://podcasts.apple.com/us/podcast/empire/id1639561921": ["tuesday", "thursday"],
+    "https://podcasts.apple.com/nl/podcast/revisionist-history/id1119389968": ["thursday"],
+    "https://podcasts.apple.com/nl/podcast/data-skeptic/id890348705": ["monday"],
+    "https://podcasts.apple.com/nl/podcast/wanging-on-with-graham-norton-and-maria-mcerlane/id1821737353": ["monday"],
+    "https://podcasts.apple.com/nl/podcast/comedy-bang-bang-the-podcast/id316045799?l=en-GB": ["monday"],
+    "https://podcasts.apple.com/nl/podcast/verbrechen/id1374777077": ["tuesday"],
+    "https://podcasts.apple.com/nl/podcast/zeit-wissen-woher-wei%C3%9Ft-du-das/id338219632": ["sunday"],
+    "https://podcasts.apple.com/nl/podcast/youre-dead-to-me/id1479973402": ["friday"],
+    "https://podcasts.apple.com/nl/podcast/the-atlas-obscura-podcast/id1555769970": ["saturday"],
+}
 
 
 def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: int = 1000):
@@ -35,6 +36,7 @@ def run(rss_url: str, output_path: str, s3_bucket: Optional[str] = None, limit: 
     write_to_json(result.model_dump_json(), output_path)
     if s3_bucket:
         write_to_r2(output_path, s3_bucket, filename)
+
 
 MAX_RETRIES = 3
 if __name__ == "__main__":
@@ -50,7 +52,6 @@ if __name__ == "__main__":
         if datetime.now().strftime("%A").lower() in days or RUN_ALL:
             LOGGER.info(f"Running scheduled analysis for {rss_url}")
 
-
             for attempt in range(MAX_RETRIES):
                 try:
                     run(rss_url=rss_url, output_path=args.output_path, s3_bucket=args.s3_bucket, limit=args.limit)
@@ -60,7 +61,7 @@ if __name__ == "__main__":
                     if attempt >= MAX_RETRIES:
                         LOGGER.exception("Max retries reached, aborting.")
                         continue
-                    sleep_seconds = 2 ** attempt
+                    sleep_seconds = 2**attempt
                     LOGGER.info(f"Retrying in {sleep_seconds} seconds...")
                     time.sleep(sleep_seconds)
         else:

@@ -26,7 +26,12 @@ from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
 from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes, ClusteredEpisodeInsights, Episode, EpisodeInsights
-from llm_podcast_explorer.src.prompts import CATEGORY_PROMPT, CLUSTER_TITLE_PROMPT, CONSOLIDATION_PROMPT, EXRACTION_PROMPT
+from llm_podcast_explorer.src.prompts import (
+    CATEGORY_PROMPT,
+    CLUSTER_TITLE_PROMPT,
+    CONSOLIDATION_PROMPT,
+    EXRACTION_PROMPT,
+)
 from llm_podcast_explorer.src.rss_feed_loader import RSSFeedLoader
 
 COSINE_DISTANCE_THRESHOLD = 0.5

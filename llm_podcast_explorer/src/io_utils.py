@@ -2,9 +2,11 @@ import os
 from pathlib import Path
 import boto3
 
+
 def write_to_json(json_str: str, path: str):
     with open(path, "w", encoding="utf-8") as f:
         f.write(json_str)
+
 
 def write_to_r2(src_path: str, bucket, target_path: str):
     session = boto3.session.Session()
@@ -16,6 +18,7 @@ def write_to_r2(src_path: str, bucket, target_path: str):
     )
     client.upload_file(src_path, bucket, target_path)
 
+
 def download_s3_file(bucket, target_path: str, dest_path: str):
     session = boto3.session.Session()
     client = session.client(
@@ -25,6 +28,7 @@ def download_s3_file(bucket, target_path: str, dest_path: str):
         endpoint_url=os.environ["AWS_ENDPOINT_URL"],
     )
     client.download_file(bucket, target_path, dest_path)
+
 
 def get_podcasts_from_s3(bucket, prefix=""):
     session = boto3.session.Session()

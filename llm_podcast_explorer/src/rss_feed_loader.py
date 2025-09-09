@@ -7,11 +7,13 @@ from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 import base64
 
+
 def podlink_url(feed_url: str, episode_guid: str) -> str:
     """
     Generate a Pod.link episode URL given a podcast feed URL and episode GUID.
     Uses base64 URL-safe encoding without '=' padding.
     """
+
     def b64_urlsafe_no_pad(s: str) -> str:
         return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
 
@@ -19,6 +21,7 @@ def podlink_url(feed_url: str, episode_guid: str) -> str:
     guid_enc = b64_urlsafe_no_pad(episode_guid)
 
     return f"https://pod.link/{feed_enc}/episode/{guid_enc}"
+
 
 class RSSFeedItem(BaseModel):
     index: int = Field(..., description="index of rss feed")
@@ -60,8 +63,6 @@ class RSSFeedItem(BaseModel):
                 return cls._extract_link(v[0])
         else:
             return "unknown"
-        
-
 
 
 class InvalidRSSException(Exception):

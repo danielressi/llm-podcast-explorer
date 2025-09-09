@@ -7,7 +7,6 @@ import hashlib
 import random
 
 
-
 # 🎨 Define a rotating palette (inspired by NTS / ChatGPT tones)
 # 🎨 Define a rotating palette (inspired by NTS / ChatGPT tones)
 PALETTE = [
@@ -20,16 +19,19 @@ PALETTE = [
     "#F9FBE7",  # lemon
 ]
 
+
 def assign_cluster_colors(clusters):
     """Assign distinct palette colors to clusters."""
     color_cycle = itertools.cycle(PALETTE)
     return {cluster: next(color_cycle) for cluster in clusters}
+
 
 # small helper to convert hex to rgba for a subtle background tint
 def hex_to_rgba(h: str, a: float = 0.06) -> str:
     h = h.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{a})"
+
 
 def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list[str] | None = None):
     """Render episodes from a given category in a mobile-friendly layout with tags & expandable description."""
@@ -40,11 +42,8 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
 
     category_df = df if selected_category == "All" else df[df["major_category"] == selected_category]
 
-
-
     if len(filtered_clusters) == 0:
         filtered_clusters = {k: True for k in df["consolidated_titles"].explode().unique()}
-
 
     if category_df.empty:
         st.info(f"No episodes found for category: {selected_category}")
@@ -136,8 +135,6 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
 
         cluster_html.append("</details>")
         st.markdown("".join(cluster_html), unsafe_allow_html=True)
-        
-
 
 
 @st.cache_data(show_spinner=False, ttl=CACHE_TIMEOUT)
