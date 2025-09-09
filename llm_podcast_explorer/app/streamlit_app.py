@@ -4,18 +4,21 @@ from pathlib import Path
 from typing import Union
 
 import streamlit as st
-from network_viz import build_networkx_graph, create_figure, update_figure
-from rss_feed_analyzer import AnalyzedEpisodes, RSSFeedAnalyzer
-from rss_feed_loader import InvalidRSSException
 from st_social_media_links import SocialMediaIcons
 from streamlit.runtime.scriptrunner import StopException
-from io_utils import get_podcasts_from_s3, download_s3_file
 
+from llm_podcast_explorer.app.network_viz import build_networkx_graph, create_figure, update_figure
+from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes
+from llm_podcast_explorer.src.io_utils import download_s3_file, get_podcasts_from_s3
+from llm_podcast_explorer.src.rss_feed_analyzer import RSSFeedAnalyzer
+from llm_podcast_explorer.src.rss_feed_loader import InvalidRSSException
+
+CACHE_TIMEOUT = "12h"
 CHECKPOINT_PATH = Path("./static")
 ALL_KEY = "All"
 EPISODE_LIMIT = 1000
 DEFAULT_MODE = "active"
-CACHE_TIMEOUT= "12h"
+
 
 PODCAST_QUERY_LOOKUP = {
     "GAG": "Geschichten aus der Geschichte",
@@ -29,8 +32,8 @@ PODCAST_QUERY_LOOKUP = {
 def load_static_data(path, bucket_name=None):
     if bucket_name is None:
         analysed_episodes = AnalyzedEpisodes.load(path)
-    else: 
-        checkpoint_path = CHECKPOINT_PATH  / path
+    else:
+        checkpoint_path = CHECKPOINT_PATH / path
         download_s3_file(bucket_name, path, checkpoint_path)
         analysed_episodes = AnalyzedEpisodes.load(checkpoint_path)
     return analysed_episodes.model_dump()
@@ -152,6 +155,8 @@ def _init_sesion_state():
         "zoom_state": None,
         "major_categories": None,
         "searched_episode": None,
+        "analysed_episodes": None,
+        "index": None,
     }
 
     for key, default in defaults.items():
@@ -404,7 +409,7 @@ def explore_analysed_episodes(analysed_episodes, timeline, animation_mode):
             st.session_state.filtered_clusters = {}
         else:
             selected_category_clusters = major_categories[st.session_state.selected_category]
-            st.session_state.filtered_clusters = {c: True for c in selected_category_clusters}
+            st.session_state.filtered_clusters = dict.fromkeys(selected_category_clusters, True)
 
     except StopException:
         st.session_state.click_selection = False
@@ -413,79 +418,146 @@ def explore_analysed_episodes(analysed_episodes, timeline, animation_mode):
     update_and_render_fig(base_fig, cluster_data, timeline)
 
 
-def main(analyis_mode, animation_mode=False):
-    title = "Podcasts | Explored"
-    st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
-    set_title_on_top(title)
-
-    _init_sesion_state()
+def select_podcast(analyis_mode, animation_mode=False):
     podcasts = {p.stem: str(p) for p in CHECKPOINT_PATH.glob("*.json")}
+    st.session_state.podcasts = podcasts
     set_podcast_from_query_params(podcasts)
-
     if analyis_mode == "active" and not st.session_state.podcast_query:
-        reset_disabled = False
         rss_url = st.text_input("Enter Apple Podcast URL or RSS Feed URL:", value=st.session_state.selected_podcast)
         # Update session state when RSS URL is provided
         if rss_url not in [None, "", " "]:
             st.session_state.selected_podcast = rss_url
-            try:
-                analysed_episodes = load_data(st.session_state.selected_podcast, st.session_state.checkpoint)
-                # enable cache and checkpoint until reset button is clicked again
-
-                st.session_state.checkpoint = True
-            except InvalidRSSException as e:
-                st.error(e)
-                st.session_state.selected_podcast = None
     elif analyis_mode == "s3-scheduled":
-        reset_disabled = True
-        podcasts = {p.stem: str(p) for p in get_podcasts_from_s3("llm-podcast-explorer") }
+        podcasts = {p.stem: str(p) for p in get_podcasts_from_s3("llm-podcast-explorer")}
         podcast_options = sorted(podcasts.keys())
-        index = podcast_options.index(st.session_state.selected_podcast) if st.session_state.podcast_query else None
-        selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=index)
+        st.session_state.index = (
+            podcast_options.index(st.session_state.selected_podcast) if st.session_state.podcast_query else None
+        )
+        selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=st.session_state.index)
 
-        st.session_state.selected_podcast = selected_podcast
-        # st.session_state.rss_url
-        if st.session_state.selected_podcast is not None:
-            analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast], bucket_name="llm-podcast-explorer")
-    else:
-        reset_disabled = True
-        podcast_options = sorted(podcasts.keys())
-        index = podcast_options.index(st.session_state.selected_podcast) if st.session_state.podcast_query else None
-        selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=index)
-
+        st.session_state.podcasts = podcasts
         st.session_state.selected_podcast = selected_podcast
 
-        # st.session_state.rss_url
-        if st.session_state.selected_podcast is not None:
-            analysed_episodes = load_static_data(podcasts[st.session_state.selected_podcast])
-
-    with st.sidebar:
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            reset = st.button("Rerun analysis", disabled=reset_disabled)
-            if reset and st.session_state.selected_podcast is not None:
-                st.session_state.checkpoint = False
-                load_data.clear()
-                st.rerun()
-        with col2:
-            reset_view = st.button("Reset view", disabled=False)
-            if not st.session_state.click_reset:
-                st.session_state.click_reset = reset_view
-
-        timeline = st.toggle("Timline mode", value=st.session_state.timeline_mode, disabled=False, on_change=reset_zoom)
-
-    if st.session_state.selected_podcast is None:
-        render_intro_text()
     else:
-        explore_analysed_episodes(analysed_episodes, timeline, animation_mode)
+        podcast_options = sorted(podcasts.keys())
+        st.session_state.index = (
+            podcast_options.index(st.session_state.selected_podcast) if st.session_state.podcast_query else None
+        )
+        selected_podcast = st.selectbox("Choose a podcast:", options=podcast_options, index=st.session_state.index)
+        st.session_state.podcasts = podcasts
+        st.session_state.selected_podcast = selected_podcast
 
-        show_infos()
-        show_social()
+
+def load_podcast(analyis_mode, animation_mode=False):
+    if analyis_mode == "active" and not st.session_state.podcast_query:
+        try:
+            analysed_episodes = load_data(st.session_state.selected_podcast, st.session_state.checkpoint)
+            # enable cache and checkpoint until reset button is clicked again
+
+            st.session_state.checkpoint = True
+        except InvalidRSSException as e:
+            st.error(e)
+            analysed_episodes = None
+            st.session_state.selected_podcast = None
+    elif analyis_mode == "s3-scheduled":
+        analysed_episodes = load_static_data(
+            st.session_state.podcasts[st.session_state.selected_podcast], bucket_name="llm-podcast-explorer"
+        )
+    else:
+
+        analysed_episodes = load_static_data(st.session_state.podcasts[st.session_state.selected_podcast])
+
+    st.session_state.analysed_episodes = analysed_episodes
 
 
 if __name__ == "__main__":
+    title = "Podcasts | Explored"
+    st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
+    st.markdown(
+        """
+    <style>
+    .category-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        color: #111;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+    }
+    .cluster-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 1.5rem 0 0.5rem 0;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .episode-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.2rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        transition: all 0.2s ease-in-out;
+    }
+    .episode-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+    .episode-link {
+        text-decoration: none;
+        color: #1e88e5;
+        font-weight: 600;
+        font-size: 1.05rem;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    .tags-container {
+        margin-top: 0.5rem;
+    }
+    .tag {
+        display: inline-block;
+        margin: 0.2rem 0.3rem 0 0;
+        padding: 0.35rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        background: #f5f5f5;
+        color: #333;
+    }
+    .tag:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.12);
+    }
+    .custom-expander {
+        margin-top: 0.8rem;
+        padding: 0.6rem 0.8rem;
+        background: #fafafa;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        color: #444;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+    set_title_on_top(title)
+    # st.sidebar.page_link('streamlit_app.py', label='Home')
+    _init_sesion_state()
+
     analyis_mode = os.environ.get("ANALYSIS_MODE", DEFAULT_MODE)
     animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ("true", "1", "t")
     if analyis_mode not in ["static", "active", "s3-scheduled"]:
         raise ValueError(f"Environment variable ANALYSIS_MODE has to be 'static' or 'active', but got {analyis_mode} ")
-    main(analyis_mode, animation_mode)
+    # pg = st.navigation([st.Page("./pages/episodes_view.py")])
+    select_podcast(analyis_mode, animation_mode)
+
+    if st.session_state.selected_podcast is None:
+        render_intro_text()
+        show_social()
+
+    else:
+        load_podcast(analyis_mode, animation_mode)
+        st.switch_page("./pages/episodes_view.py")

@@ -1,9 +1,25 @@
+import base64
 import re
 from typing import Any, Optional
 
 import feedparser
 import requests
 from pydantic import AliasChoices, BaseModel, Field, field_validator
+
+
+def podlink_url(feed_url: str, episode_guid: str) -> str:
+    """
+    Generate a Pod.link episode URL given a podcast feed URL and episode GUID.
+    Uses base64 URL-safe encoding without '=' padding.
+    """
+
+    def b64_urlsafe_no_pad(s: str) -> str:
+        return base64.urlsafe_b64encode(s.encode()).decode().rstrip("=")
+
+    feed_enc = b64_urlsafe_no_pad(feed_url)
+    guid_enc = b64_urlsafe_no_pad(episode_guid)
+
+    return f"https://pod.link/{feed_enc}/episode/{guid_enc}"
 
 
 class RSSFeedItem(BaseModel):
@@ -24,6 +40,7 @@ class RSSFeedItem(BaseModel):
     )
     published: str = Field(..., description="The date the episode was published")
     tags: Optional[list[Any]] = Field(default=None, description="Tags associated with the episode")
+    podlink: Optional[str] = Field(default=None, description="The Pod.link URL for the episode")
 
     def _extract_link(v):
         if "href" in v:
@@ -53,7 +70,7 @@ class InvalidRSSException(Exception):
 
 class RSSFeedLoader:
     def __init__(self, url):
-        self.feed = self._init_feed(url)
+        self.feed, self.feed_url = self._init_feed(url)
         self.description = self.feed.feed.get("description", "")
         self.title = self.feed.feed.get("title", "")
         self.size = len(self.feed.entries)
@@ -66,11 +83,12 @@ class RSSFeedLoader:
         if feed.bozo:
             raise InvalidRSSException("Invalid RSS feed. Provide valid RSS url")
 
-        return feed
+        return feed, feed_url
 
     def lazy_load(self):
         for i, entry in enumerate(self.feed.entries):
             entry["index"] = i
+            entry["podlink"] = podlink_url(self.feed_url, entry.get("id", ""))
             rss_item = RSSFeedItem(**entry)
             if len(rss_item.description) > 0:
                 yield rss_item
