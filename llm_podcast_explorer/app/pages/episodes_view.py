@@ -1,19 +1,21 @@
 import copy
 import os
-import streamlit as st
 from typing import Union
+
+import pandas as pd
+import streamlit as st
+from streamlit.runtime.scriptrunner import StopException
+
+from llm_podcast_explorer.app.network_viz import build_networkx_graph, create_figure, update_figure
 from llm_podcast_explorer.app.streamlit_app import (
     ALL_KEY,
     CACHE_TIMEOUT,
     DEFAULT_MODE,
-    show_social,
     load_data,
     set_title_on_top,
+    show_social,
 )
-from llm_podcast_explorer.app.network_viz import build_networkx_graph, create_figure, update_figure
 from llm_podcast_explorer.app.table_viz import prepare_table, show_table
-from streamlit.runtime.scriptrunner import StopException
-import pandas as pd
 
 
 def reset_search():
@@ -374,7 +376,7 @@ if st.session_state.analysed_episodes is not None:
             st.session_state.filtered_clusters = {}
         else:
             selected_category_clusters = major_categories[st.session_state.selected_category]
-            st.session_state.filtered_clusters = {c: True for c in selected_category_clusters}
+            st.session_state.filtered_clusters = dict.fromkeys(selected_category_clusters, True)
 
         tab1, tab2 = st.tabs(["Table", "Graph"])
         with tab1:

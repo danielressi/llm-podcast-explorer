@@ -1,11 +1,10 @@
+import base64
 import re
 from typing import Any, Optional
 
 import feedparser
 import requests
 from pydantic import AliasChoices, BaseModel, Field, field_validator
-
-import base64
 
 
 def podlink_url(feed_url: str, episode_guid: str) -> str:

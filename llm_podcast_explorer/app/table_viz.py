@@ -1,11 +1,11 @@
-from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes
-from llm_podcast_explorer.app.streamlit_app import CACHE_TIMEOUT
-import pandas as pd
-import streamlit as st
 import itertools
-import hashlib
 import random
 
+import pandas as pd
+import streamlit as st
+
+from llm_podcast_explorer.app.streamlit_app import CACHE_TIMEOUT
+from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes
 
 # 🎨 Define a rotating palette (inspired by NTS / ChatGPT tones)
 # 🎨 Define a rotating palette (inspired by NTS / ChatGPT tones)
@@ -43,7 +43,7 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
     category_df = df if selected_category == "All" else df[df["major_category"] == selected_category]
 
     if len(filtered_clusters) == 0:
-        filtered_clusters = {k: True for k in df["consolidated_titles"].explode().unique()}
+        filtered_clusters = dict.fromkeys(df["consolidated_titles"].explode().unique(), True)
 
     if category_df.empty:
         st.info(f"No episodes found for category: {selected_category}")
@@ -59,17 +59,25 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
 
     display_name = "Showing All Categories" if selected_category == "All" else selected_category
     # --- Category header ---
-    st.markdown(
-        f"""
-        <div style="background:{category_bg}; padding:1rem; border-radius:12px; margin:0.6rem 0;">
-          <div style="min-width:0;">
-            <div style="font-weight:800; font-size:1.35rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{display_name}</div>
-            <div style="font-size:0.9rem; color:#555;">{len(visible_clusters)} clusters • {len(category_df)} episodes</div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    title_style = (
+        "font-weight:800; "
+        "font-size:1.35rem; "
+        "white-space:nowrap; "
+        "overflow:hidden; "
+        "text-overflow:ellipsis;"
     )
+    meta_style = "font-size:0.9rem; color:#555;"
+
+    header_html = (
+        f"<div style='background:{category_bg}; padding:1rem; border-radius:12px; margin:0.6rem 0;'>"
+        "<div style='min-width:0;'>"
+        f"<div style='{title_style}'>{display_name}</div>"
+        f"<div style='{meta_style}'>{len(visible_clusters)} clusters • {len(category_df)} episodes</div>"
+        "</div>"
+        "</div>"
+    )
+
+    st.markdown(header_html, unsafe_allow_html=True)
     show_clusters = [k for k, show in filtered_clusters.items() if show and show != "legendonly"]
     random.shuffle(show_clusters)
 
@@ -78,7 +86,8 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
 
     # Iterate clusters (keep loop unchanged as requested)
     for cluster in show_clusters:
-        df_cluster = category_df[category_df["consolidated_titles"].apply(lambda x: cluster in x if x else False)]
+        df_cluster = (category_df[category_df["consolidated_titles"]
+                                  .apply(lambda x, cluster=cluster: cluster in x if x else False)])
         if df_cluster.empty:
             continue
 
@@ -90,7 +99,8 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
         cluster_html = []
         cluster_html.append(
             f"<details class='cluster-details' style='margin:0.6rem 0;'{open_attr}>"
-            f"<summary class='cluster-title' style='background:{cluster_color}; padding:0.4rem 0.8rem; border-radius:8px; cursor:pointer;'>"
+            f"<summary class='cluster-title' style='background:{cluster_color};"
+            f"padding:0.4rem 0.8rem; border-radius:8px; cursor:pointer;'>"
             f"{cluster} &nbsp; <span style='color:#666; font-weight:600;'>({len(df_cluster)})</span>"
             f"</summary>"
         )
@@ -123,7 +133,8 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
                 f"gap:1rem;"
                 f"align-items:flex-start;'>"
                 f"<div style='flex:2; min-width:0;'>"
-                f"<a class='episode-link' href='{row.podlink}' target='_blank' style='color:{cluster_color}; text-decoration:none;'>🎧 {row.title}</a>"
+                f"<a class='episode-link' href='{row.podlink}' target='_blank' style='color:{cluster_color};"
+                f"text-decoration:none;'>🎧 {row.title}</a>"
                 f"{desc_html}"
                 f"</div>"
                 f"<div style='flex:1; display:flex; justify-content:flex-end; gap:0.4rem; flex-wrap:wrap;'>"

@@ -1,11 +1,11 @@
 import argparse
 import logging
+import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-import os
-import time
-from openai import APIConnectionError, RateLimitError, Timeout
+
 from src.io_utils import write_to_json, write_to_r2
 from src.rss_feed_analyzer import RSSFeedAnalyzer
 

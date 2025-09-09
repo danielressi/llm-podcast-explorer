@@ -20,7 +20,6 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import BaseModel, Field, RootModel, field_validator
-
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import normalize
 from tqdm import tqdm

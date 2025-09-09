@@ -4,14 +4,14 @@ from pathlib import Path
 from typing import Union
 
 import streamlit as st
-from llm_podcast_explorer.app.network_viz import build_networkx_graph, create_figure, update_figure
-from llm_podcast_explorer.src.rss_feed_analyzer import RSSFeedAnalyzer
-from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes
-from llm_podcast_explorer.src.rss_feed_loader import InvalidRSSException
-from llm_podcast_explorer.src.io_utils import get_podcasts_from_s3, download_s3_file
 from st_social_media_links import SocialMediaIcons
 from streamlit.runtime.scriptrunner import StopException
 
+from llm_podcast_explorer.app.network_viz import build_networkx_graph, create_figure, update_figure
+from llm_podcast_explorer.src.episodes_model import AnalyzedEpisodes
+from llm_podcast_explorer.src.io_utils import download_s3_file, get_podcasts_from_s3
+from llm_podcast_explorer.src.rss_feed_analyzer import RSSFeedAnalyzer
+from llm_podcast_explorer.src.rss_feed_loader import InvalidRSSException
 
 CACHE_TIMEOUT = "12h"
 CHECKPOINT_PATH = Path("./static")
@@ -409,7 +409,7 @@ def explore_analysed_episodes(analysed_episodes, timeline, animation_mode):
             st.session_state.filtered_clusters = {}
         else:
             selected_category_clusters = major_categories[st.session_state.selected_category]
-            st.session_state.filtered_clusters = {c: True for c in selected_category_clusters}
+            st.session_state.filtered_clusters = dict.fromkeys(selected_category_clusters, True)
 
     except StopException:
         st.session_state.click_selection = False
@@ -450,7 +450,6 @@ def select_podcast(analyis_mode, animation_mode=False):
 
 def load_podcast(analyis_mode, animation_mode=False):
     if analyis_mode == "active" and not st.session_state.podcast_query:
-        reset_disabled = False
         try:
             analysed_episodes = load_data(st.session_state.selected_podcast, st.session_state.checkpoint)
             # enable cache and checkpoint until reset button is clicked again
@@ -465,7 +464,6 @@ def load_podcast(analyis_mode, animation_mode=False):
             st.session_state.podcasts[st.session_state.selected_podcast], bucket_name="llm-podcast-explorer"
         )
     else:
-        reset_disabled = True
 
         analysed_episodes = load_static_data(st.session_state.podcasts[st.session_state.selected_podcast])
 
