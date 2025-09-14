@@ -36,4 +36,21 @@ jobs:
           AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  ping-website:
+    needs: update-podcasts
+    name: ping streamlit app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait briefly for deployment to settle
+        run: sleep 10
 
+      - name: Call public site
+        run: |
+          url="https://podcasts-explored.streamlit.app/"
+          echo "Pinging $url"
+          status=$(curl -fsS -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --max-time 30 "$url" || true)
+          echo "HTTP status: $status"
+          if [ "$status" -ne 200 ]; then
+            echo "Unexpected status $status"
+            exit 1
+          fi
