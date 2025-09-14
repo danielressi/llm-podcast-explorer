@@ -99,7 +99,7 @@ def build_cluster_nodes(G, episodes, clusters_2_category):
                 # clusters_raw=ep["clusters"]["titles"],
                 # cluster_attempt=ep["clusters"]["attempt"],
                 "referenced_episodes": ep["insights"]["referenced_episodes_id"],
-                "link": ep["metadata"]["link"],
+                "link": ep["metadata"]["podlink"],
                 # year=f"{ep['insights']['topic_year']} ({ep['insights']['topic_century']} Century)",
             },
             cluster=show_titles,

@@ -133,8 +133,14 @@ def show_table(df: pd.DataFrame, selected_category: str, filtered_clusters: list
                 f"gap:1rem;"
                 f"align-items:flex-start;'>"
                 f"<div style='flex:2; min-width:0;'>"
-                f"<a class='episode-link' href='{row.podlink}' target='_blank' style='color:{cluster_color};"
-                f"text-decoration:none;'>🎧 {row.title}</a>"
+                # Title as plain text (not a link)
+                f"<div class='episode-title' style='font-weight:700; color:{cluster_color};"
+                f"font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{row.title}</div>"
+                # Listen link below the title
+                f"<div style='margin-top:0.35rem;'>"
+                f"<a class='listen-link' href='{row.podlink}' target='_blank' style='color:{cluster_color};"
+                f"text-decoration:none; font-weight:600;'>🎧 Listen now</a>"
+                f"</div>"
                 f"{desc_html}"
                 f"</div>"
                 f"<div style='flex:1; display:flex; justify-content:flex-end; gap:0.4rem; flex-wrap:wrap;'>"

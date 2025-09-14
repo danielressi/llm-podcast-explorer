@@ -236,7 +236,7 @@ animation_mode = os.getenv("ANIMATION_MODE", "false").lower() in ("true", "1", "
 reset_disabled = analysis_mode in ["static", "s3-scheduled"]
 
 title = "Podcasts | Explored"
-st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="expanded")
+st.set_page_config(page_title=title, layout="centered", initial_sidebar_state="collapsed")
 set_title_on_top(title)
 st.markdown(
     """
@@ -375,7 +375,8 @@ if st.session_state.analysed_episodes is not None:
         elif st.session_state.selected_category == ALL_KEY:
             st.session_state.filtered_clusters = {}
         else:
-            selected_category_clusters = major_categories[st.session_state.selected_category]
+            selected_category = selected_category[0] if isinstance(st.session_state.selected_category, list) else st.session_state.selected_category
+            selected_category_clusters = major_categories[selected_category]
             st.session_state.filtered_clusters = dict.fromkeys(selected_category_clusters, True)
 
         tab1, tab2 = st.tabs(["Table", "Graph"])
