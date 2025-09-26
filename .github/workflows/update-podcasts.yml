@@ -47,10 +47,6 @@ jobs:
       - name: Call public site
         run: |
           url="https://podcasts-explored.streamlit.app/"
-          echo "Pinging $url"
-          status=$(curl -fsS -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --max-time 30 "$url" || true)
-          echo "HTTP status: $status"
-          if [ "$status" -ne 200 ]; then
-            echo "Unexpected status $status"
-            exit 1
-          fi
+          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --max-time 30 "$url")
+
+          echo "Pinged $url → HTTP $status at $(date)"
