@@ -23,6 +23,7 @@ SCHEDULE = {
     "https://podcasts.apple.com/nl/podcast/zeit-wissen-woher-wei%C3%9Ft-du-das/id338219632": ["sunday"],
     "https://podcasts.apple.com/nl/podcast/youre-dead-to-me/id1479973402": ["friday"],
     "https://podcasts.apple.com/nl/podcast/the-atlas-obscura-podcast/id1555769970": ["saturday"],
+    "https://podcasts.apple.com/nl/podcast/heavyweight/id1150800298": ["wednesday"],
 }
 
 
